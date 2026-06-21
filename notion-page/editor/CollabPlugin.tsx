@@ -1,0 +1,45 @@
+'use client';
+
+/**
+ * Hocuspocus collaboration plugin for Lexical.
+ *
+ * Wraps CollaborationPlugin from @lexical/react, wiring HocuspocusProvider
+ * as the Yjs provider. In collab mode: HistoryPlugin and OnChangePlugin
+ * must NOT be mounted — Yjs handles both undo history and persistence.
+ */
+
+import { useRef } from 'react';
+import { CollaborationPlugin } from '@lexical/react/LexicalCollaborationPlugin';
+import { HocuspocusProvider } from '@hocuspocus/provider';
+import type { Provider } from '@lexical/yjs';
+import { Doc } from 'yjs';
+import type { SerializedEditorState } from 'lexical';
+import type { CollabConfig } from '../types';
+
+interface CollabPluginProps extends CollabConfig {
+  initialContent?: SerializedEditorState | null;
+}
+
+export function CollabPlugin({ wsUrl, room, user, initialContent }: CollabPluginProps) {
+  const providerRef = useRef<Provider | null>(null);
+
+  return (
+    <CollaborationPlugin
+      id={room}
+      providerFactory={(id, yjsDocMap) => {
+        if (providerRef.current) return providerRef.current;
+        const doc = new Doc();
+        yjsDocMap.set(id, doc);
+        const provider = new HocuspocusProvider({ url: wsUrl, name: id, document: doc });
+        // HocuspocusProvider is structurally compatible with the Lexical Provider interface
+        providerRef.current = provider as unknown as Provider;
+        return providerRef.current;
+      }}
+      shouldBootstrap
+      initialEditorState={initialContent ? JSON.stringify(initialContent) : null}
+      username={user.name}
+      cursorColor={user.color}
+      awarenessData={{ userId: user.id, color: user.color }}
+    />
+  );
+}

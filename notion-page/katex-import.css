@@ -1,0 +1,2 @@
+/* KaTeX font styles — imported before other styles so @import rule is valid */
+@import url('https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css');
