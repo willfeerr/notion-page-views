@@ -70,14 +70,17 @@ export function PageHeader({
           style={{ backgroundImage: `url(${coverUrl})`, backgroundPositionY: `${coverPosition}%` }}
           onMouseDown={onCoverPositionChange ? onCoverMouseDown : undefined}
         >
-          <div className="npc-cover-actions">
+          <div className="npc-cover-actions" onMouseDown={(event) => event.stopPropagation()}>
             {onCoverPositionChange && (
               <span className="npc-cover-action-hint">
                 <Move size={12} /> Arraste para reposicionar
               </span>
             )}
             {onCoverChange && (
-              <button type="button" className="npc-cover-remove" onClick={() => onCoverChange(null)}>
+              <CoverPickerPopover onSubmit={onCoverChange} compact />
+            )}
+            {onCoverChange && (
+              <button type="button" className="npc-cover-button" onClick={() => onCoverChange(null)}>
                 <X size={13} /> Remover capa
               </button>
             )}
@@ -106,7 +109,7 @@ export function PageHeader({
                 )}
               />
             )}
-            {!coverUrl && onCoverChange && <CoverUrlPopover onSubmit={onCoverChange} />}
+            {!coverUrl && onCoverChange && <CoverPickerPopover onSubmit={onCoverChange} />}
           </div>
         )}
 
@@ -123,28 +126,49 @@ export function PageHeader({
   );
 }
 
-function CoverUrlPopover({ onSubmit }: { onSubmit: (url: string) => void }) {
+function CoverPickerPopover({ onSubmit, compact = false }: { onSubmit: (url: string) => void; compact?: boolean }) {
   return (
     <Popover align="left"
       trigger={({ toggle }): ReactNode => (
-        <button type="button" className="npc-ghost-btn" onClick={toggle}><ImageIcon size={14} /> Adicionar capa</button>
+        <button type="button" className={compact ? 'npc-cover-button' : 'npc-ghost-btn'} onClick={toggle}>
+          <ImageIcon size={14} /> {compact ? 'Alterar capa' : 'Adicionar capa'}
+        </button>
       )}
     >
       {({ close }) => (
-        <CoverUrlForm onSubmit={(url) => { onSubmit(url); close(); }} />
+        <CoverPicker onSubmit={(url) => { onSubmit(url); close(); }} />
       )}
     </Popover>
   );
 }
 
-function CoverUrlForm({ onSubmit }: { onSubmit: (url: string) => void }) {
+function CoverPicker({ onSubmit }: { onSubmit: (url: string) => void }) {
   const [url, setUrl] = useState('');
   return (
-    <form className="npc-cover-form"
-      onSubmit={(e) => { e.preventDefault(); if (url.trim()) onSubmit(url.trim()); }}>
-      <input autoFocus className="npc-text-input" placeholder="Cole o link de uma imagem"
-        value={url} onChange={(e) => setUrl(e.target.value)} />
-      <button type="submit" className="npc-primary-btn-sm">Salvar</button>
-    </form>
+    <div className="npc-cover-picker">
+      <form className="npc-cover-form"
+        onSubmit={(e) => { e.preventDefault(); if (url.trim()) onSubmit(url.trim()); }}>
+        <input autoFocus className="npc-text-input" placeholder="Cole o link de uma imagem"
+          value={url} onChange={(e) => setUrl(e.target.value)} />
+        <button type="submit" className="npc-primary-btn-sm">Salvar</button>
+      </form>
+      <div className="npc-cover-divider"><span>ou</span></div>
+      <label className="npc-cover-upload">
+        <ImageIcon size={14} />Enviar imagem deste dispositivo
+        <input type="file" accept="image/*" onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          if (file.size > 2_000_000) {
+            window.alert('Use uma imagem de até 2 MB nesta versão local.');
+            return;
+          }
+          const reader = new FileReader();
+          reader.addEventListener('load', () => {
+            if (typeof reader.result === 'string') onSubmit(reader.result);
+          });
+          reader.readAsDataURL(file);
+        }} />
+      </label>
+    </div>
   );
 }

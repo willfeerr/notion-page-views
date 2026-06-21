@@ -11,14 +11,43 @@ type Message =
 /** Minimal Lexical-compatible Yjs provider using the browser BroadcastChannel API. */
 export class BroadcastProvider {
   readonly awareness: Awareness;
+  private readonly storageKey: string;
   private channel: BroadcastChannel | null = null;
   private listeners = new Map<string, Set<Listener>>();
   private connected = false;
   private synced = false;
+  private syncTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(readonly name: string, readonly document: Doc) {
+    this.storageKey = `notion-yjs:${name}`;
+    this.restore();
     this.awareness = new Awareness(document);
     this.connect();
+  }
+
+  private restore(): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const encoded = localStorage.getItem(this.storageKey);
+      if (!encoded) return;
+      const binary = atob(encoded);
+      const update = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+      applyUpdate(this.document, update, this);
+    } catch {
+      try { localStorage.removeItem(this.storageKey); } catch { /* storage unavailable */ }
+    }
+  }
+
+  private persist(): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const update = encodeStateAsUpdate(this.document);
+      let binary = '';
+      for (const byte of update) binary += String.fromCharCode(byte);
+      localStorage.setItem(this.storageKey, btoa(binary));
+    } catch {
+      // Storage can be unavailable or full; live BroadcastChannel sync still works.
+    }
   }
 
   private post(message: Message): void {
@@ -26,6 +55,7 @@ export class BroadcastProvider {
   }
 
   private handleDocumentUpdate = (update: Uint8Array, origin: unknown): void => {
+    this.persist();
     if (origin !== this) this.post({ type: 'update', update });
   };
 
@@ -60,10 +90,11 @@ export class BroadcastProvider {
     this.document.on('update', this.handleDocumentUpdate);
     this.awareness.on('update', this.handleAwarenessUpdate);
     this.post({ type: 'sync-request' });
-    queueMicrotask(() => {
+    this.syncTimer = setTimeout(() => {
       if (!this.synced) { this.synced = true; this.emit('sync', true); }
       this.emit('status', { status: 'connected' });
-    });
+      this.syncTimer = null;
+    }, 100);
   }
 
   disconnect(): void {
@@ -74,6 +105,8 @@ export class BroadcastProvider {
     this.channel?.removeEventListener('message', this.handleMessage);
     this.channel?.close();
     this.channel = null;
+    if (this.syncTimer) clearTimeout(this.syncTimer);
+    this.syncTimer = null;
     this.connected = false;
     this.emit('status', { status: 'disconnected' });
   }

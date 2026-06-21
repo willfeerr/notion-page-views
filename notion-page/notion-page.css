@@ -556,8 +556,7 @@
 .npc-cover-form {
   display: flex;
   gap: 6px;
-  padding: 8px;
-  width: 280px;
+  width: 100%;
 }
 .npc-primary-btn-sm {
   flex-shrink: 0;
@@ -1326,12 +1325,29 @@
   opacity: 0; transition: opacity 150ms;
 }
 .npc-cover:hover .npc-cover-actions { opacity: 1; }
+.npc-cover-button {
+  display: inline-flex; align-items: center; gap: 5px;
+  font: 500 12px var(--npc-font); color: var(--npc-text);
+  background: rgba(255,255,255,0.92); border: 0; border-radius: 4px;
+  padding: 5px 8px; cursor: pointer; white-space: nowrap;
+}
+.npc-cover-button:hover { background: #fff; }
 .npc-cover-action-hint {
   display: flex; align-items: center; gap: 4px;
   font-size: 12px; color: rgba(255,255,255,0.8);
   background: rgba(0,0,0,0.35); border-radius: 4px; padding: 4px 8px;
   pointer-events: none;
 }
+.npc-cover-picker { width: 300px; padding: 10px; }
+.npc-cover-divider { display: flex; align-items: center; gap: 8px; margin: 9px 0; color: var(--npc-text-secondary); font-size: 11px; }
+.npc-cover-divider::before, .npc-cover-divider::after { content: ''; height: 1px; background: var(--npc-border); flex: 1; }
+.npc-cover-upload {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 34px; border: 1px solid var(--npc-border); border-radius: var(--npc-radius);
+  color: var(--npc-text); font-size: 12.5px; cursor: pointer;
+}
+.npc-cover-upload:hover { background: var(--npc-hover-bg); }
+.npc-cover-upload input { display: none; }
 
 /* ═══════════════════════════════════════════════════════════════
    CODE HIGHLIGHT

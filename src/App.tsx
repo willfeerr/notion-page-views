@@ -26,6 +26,29 @@ function emptyValueFor(definition: PropertyDefinition): StoredPropertyValue {
   return null;
 }
 
+function normalizePropertyValue(
+  definition: PropertyDefinition,
+  previous: PropertyDefinition | undefined,
+  value: StoredPropertyValue,
+): StoredPropertyValue {
+  if (!previous || previous.type !== definition.type) return emptyValueFor(definition);
+  if (definition.type === 'select' || definition.type === 'status') {
+    return typeof value === 'string' && definition.options.some((option) => option.id === value) ? value : null;
+  }
+  if (definition.type === 'multi_select') {
+    const validIds = new Set(definition.options.map((option) => option.id));
+    return Array.isArray(value) ? value.filter((id) => validIds.has(id)) : [];
+  }
+  if (definition.type === 'person') {
+    const validIds = new Set(definition.people.map((person) => person.id));
+    const selected = Array.isArray(value) ? value.filter((id) => validIds.has(id)) : [];
+    return definition.multiple === false ? selected.slice(0, 1) : selected;
+  }
+  if (definition.type === 'checkbox') return Boolean(value);
+  if (definition.type === 'number') return typeof value === 'number' ? value : null;
+  return value;
+}
+
 export default function App() {
   const [initial] = useState(loadState);
   const [schema, setSchema] = useState(initial.schema);
@@ -92,9 +115,13 @@ export default function App() {
 
   function updatePage(id: string, patch: Partial<NotionPageData>) {
     const now = new Date().toISOString();
-    setPages((current) => current.map((page) => page.id === id
-      ? { ...page, ...patch, lastEditedTime: now, properties: { ...page.properties, editedTime: now, ...(patch.properties ?? {}) } }
-      : page));
+    const editedProperty = schema.properties.find((property) => property.type === 'last_edited_time');
+    setPages((current) => current.map((page) => {
+      if (page.id !== id) return page;
+      const properties = { ...page.properties, ...(patch.properties ?? {}) };
+      if (editedProperty) properties[editedProperty.id] = now;
+      return { ...page, ...patch, lastEditedTime: now, properties };
+    }));
   }
 
   function updateProperty(pageId: string, propertyId: string, value: StoredPropertyValue) {
@@ -104,13 +131,13 @@ export default function App() {
   }
 
   function updateSchema(next: NotionSchema) {
-    const previousIds = new Set(schema.properties.map((property) => property.id));
-    const nextIds = new Set(next.properties.map((property) => property.id));
-    const added = next.properties.filter((property) => !previousIds.has(property.id));
+    const previousById = new Map(schema.properties.map((property) => [property.id, property]));
     setSchema(next);
     setPages((current) => current.map((page) => {
-      const properties = Object.fromEntries(Object.entries(page.properties).filter(([id]) => nextIds.has(id)));
-      for (const definition of added) properties[definition.id] = emptyValueFor(definition);
+      const properties = Object.fromEntries(next.properties.map((definition) => [
+        definition.id,
+        normalizePropertyValue(definition, previousById.get(definition.id), page.properties[definition.id]),
+      ]));
       return { ...page, properties };
     }));
   }
@@ -119,8 +146,9 @@ export default function App() {
     const now = new Date().toISOString();
     const properties = Object.fromEntries(schema.properties.map((definition) => [definition.id, emptyValueFor(definition)]));
     if (statusDefinition && statusId) properties[statusDefinition.id] = statusId;
-    properties.createdTime = now;
-    properties.editedTime = now;
+    for (const definition of schema.properties) {
+      if (definition.type === 'created_time' || definition.type === 'last_edited_time') properties[definition.id] = now;
+    }
     const page: NotionPageData = {
       id: crypto.randomUUID(), icon: '📄', coverUrl: null, title: 'Sem titulo', properties,
       content: null, createdTime: now, lastEditedTime: now,

@@ -4,10 +4,10 @@ This repository now runs the real React/Lexical components. The table separates 
 
 | Area | Status | Notes |
 |---|---|---|
-| Page title, icon and cover | Implemented | Controlled and persisted locally |
+| Page title, icon and cover | Implemented | Editable emoji; cover accepts URL or local image |
 | Cover repositioning | Implemented | Vertical position persisted |
 | Text, number, URL, email and phone properties | Implemented | Editable fields and compact card rendering |
-| Select and multi-select | Implemented | Create, recolor and select options |
+| Select and multi-select | Implemented | Create, rename, recolor, delete and select options |
 | Status | Implemented | Grouped options and new option assignment |
 | Date | Partial | Single date; range, time and reminders remain |
 | Person | Implemented | Multi-person selection from workspace people |
@@ -18,8 +18,8 @@ This repository now runs the real React/Lexical components. The table separates 
 | Board cards | Implemented | Status columns and card drag between columns |
 | Rich-text editor | Implemented | Real Lexical state, slash menu and custom nodes |
 | Images, embeds, bookmarks and math | Implemented | URL-based MVP nodes |
-| Local persistence | Implemented | Schema, pages, properties and Lexical JSON |
-| Real-time collaboration | Ready for integration | Hocuspocus adapter exists; server/auth are not part of this demo |
+| Local persistence | Implemented | Schema/page snapshot plus persisted binary Yjs state per room |
+| Real-time collaboration | Implemented locally | Yjs over BroadcastChannel; Hocuspocus transport adapter is ready |
 | Files property | Missing | Requires upload/storage contract |
 | Formula | Missing | Requires expression engine and dependency graph |
 | Relation and rollup | Missing | Requires database identity and query layer |
