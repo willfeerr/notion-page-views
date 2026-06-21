@@ -4,11 +4,15 @@ Preview interativo das views presentes no pacote `notion-page-clone-v3`.
 
 ## Views
 
-- Board com colunas e cards clicaveis
-- Pagina completa com propriedades e conteudo editavel
+- Board com drag-and-drop entre colunas, ordenacao e menus dos cards
+- Pagina completa com titulo, icone, capa e propriedades editaveis
+- Dropdowns de status, prioridade, tags e pessoas
+- Reordenacao das propriedades por drag-and-drop
+- Editor em blocos com insercao, transformacao, duplicacao e exclusao
+- Blocos arrastaveis de texto, titulo, tarefa, callout, citacao, divisor e imagem
 - Galeria dos principais componentes
 - Layout responsivo para desktop e celular
-- Persistencia local de paginas, titulos e status
+- Persistencia local de todas as alteracoes
 
 ## Executar
 
