@@ -3,68 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Preview interativo das views Notion Page Clone" />
-    <title>Notion Page Views</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <meta name="description" content="Implementacao real de Notion Pages com React e Lexical" />
+    <title>Notion Pages Lab</title>
   </head>
   <body>
-    <div class="app-shell">
-      <aside class="sidebar" aria-label="Navegacao principal">
-        <div class="workspace-mark"><span>W</span><strong>Workspace</strong></div>
-        <nav class="sidebar-nav">
-          <button class="nav-item is-active" data-view="board"><span aria-hidden="true">▦</span>Board</button>
-          <button class="nav-item" data-view="page"><span aria-hidden="true">□</span>Pagina</button>
-          <button class="nav-item" data-view="components"><span aria-hidden="true">◫</span>Componentes</button>
-        </nav>
-        <div class="sidebar-note">
-          <span class="status-dot"></span>
-          Preview local
-        </div>
-      </aside>
-
-      <main class="main">
-        <header class="topbar">
-          <button class="mobile-menu" type="button" aria-label="Abrir menu">☰</button>
-          <div class="breadcrumbs"><span>Projetos</span><b>/</b><strong id="current-view-label">Board</strong></div>
-          <div class="topbar-actions">
-            <button class="icon-button" type="button" title="Buscar">⌕</button>
-            <div class="avatar">WF</div>
-          </div>
-        </header>
-
-        <section id="view-root" class="view-root" aria-live="polite"></section>
-      </main>
-    </div>
-
-    <template id="board-template">
-      <div class="board-view">
-        <div class="view-heading">
-          <div>
-            <p class="eyebrow">DATABASE</p>
-            <h1>Roadmap de produto</h1>
-          </div>
-          <div class="heading-actions">
-            <button class="button secondary" type="button">Filtrar</button>
-            <button class="button primary" id="new-card" type="button">Nova pagina</button>
-          </div>
-        </div>
-        <div class="board" id="board"></div>
-      </div>
-    </template>
-
-    <template id="page-template">
-      <article class="page-view" id="page-view"></article>
-    </template>
-
-    <template id="components-template">
-      <div class="components-view">
-        <div class="view-heading compact-heading">
-          <div><p class="eyebrow">UI INVENTORY</p><h1>Componentes</h1></div>
-        </div>
-        <div id="components-grid" class="components-grid"></div>
-      </div>
-    </template>
-
-    <script type="module" src="./app.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

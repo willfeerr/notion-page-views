@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { ChevronDown, Check, Plus, Search } from 'lucide-react';
-import type { PropertyColor, SelectOption, StatusGroup } from '../types';
+import type { SelectOption, StatusGroup } from '../types';
 import { COLOR_TOKENS, nextOptionColor } from '../propertyTokens';
 import { Popover } from './Popover';
 import { OptionColorPicker } from './OptionColorPicker';
@@ -16,6 +16,7 @@ export interface SelectFieldProps {
   onChange?: (next: string | null) => void;
   onCreateOption?: (option: SelectOption) => void;
   onUpdateOption?: (option: SelectOption) => void;
+  onDeleteOption?: (optionId: string) => void;
 }
 
 export function Pill({ option }: { option: SelectOption }) {
@@ -34,7 +35,7 @@ function StatusLabel({ option }: { option: SelectOption }) {
 
 export function SelectField({
   variant, options, groups, value, compact = false,
-  onChange, onCreateOption, onUpdateOption,
+  onChange, onCreateOption, onUpdateOption, onDeleteOption,
 }: SelectFieldProps) {
   const selected = options.find((o) => o.id === value) ?? null;
   const [search, setSearch] = useState('');
@@ -59,7 +60,7 @@ export function SelectField({
   function handleCreate(close: () => void) {
     if (!search.trim()) return;
     const newOpt: SelectOption = {
-      id: `opt-${Date.now()}`,
+      id: `opt-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`,
       name: search.trim(),
       color: nextOptionColor(options.length),
     };
@@ -109,7 +110,11 @@ export function SelectField({
                   {onUpdateOption && (
                     <OptionColorPicker
                       option={option}
-                      onColorChange={(color: PropertyColor) => onUpdateOption({ ...option, color })}
+                      onUpdate={onUpdateOption}
+                      onDelete={onDeleteOption ? () => {
+                        onDeleteOption(option.id);
+                        if (value === option.id) onChange?.(null);
+                      } : undefined}
                     />
                   )}
                 </div>

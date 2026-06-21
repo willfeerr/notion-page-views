@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import type {
   NotionSchema, PageProperties, PropertyDefinition,
-  PropertyType, SelectOption, StoredPropertyValue,
+  PersonOption, PropertyType, SelectOption, StoredPropertyValue,
 } from './types';
 import { PROPERTY_ICONS, PROPERTY_TYPE_LABELS } from './propertyTokens';
 import { PropertyField } from './fields/PropertyField';
@@ -54,29 +54,36 @@ const CHANGEABLE_TYPE_MAP: Partial<Record<PropertyType, PropertyType[]>> = {
   phone: ['text'],
 };
 
-function buildNewProperty(type: PropertyType): PropertyDefinition {
-  const id = `prop-${Date.now()}`;
+function createId(prefix: string): string {
+  return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
+}
+
+function buildNewProperty(type: PropertyType, people: PersonOption[] = []): PropertyDefinition {
+  const id = createId('prop');
   switch (type) {
     case 'select':
       return { id, name: 'Select', type, options: [] };
     case 'multi_select':
       return { id, name: 'Multi-select', type, options: [] };
     case 'status':
+      const todoId = createId('status');
+      const doingId = createId('status');
+      const doneId = createId('status');
       return {
         id, name: 'Status', type,
         options: [
-          { id: 'todo', name: 'A fazer', color: 'gray' },
-          { id: 'doing', name: 'Em andamento', color: 'blue' },
-          { id: 'done', name: 'Concluído', color: 'green' },
+          { id: todoId, name: 'A fazer', color: 'gray' },
+          { id: doingId, name: 'Em andamento', color: 'blue' },
+          { id: doneId, name: 'Concluído', color: 'green' },
         ],
         groups: [
-          { id: 'g-todo', name: 'A fazer', color: 'gray', optionIds: ['todo'] },
-          { id: 'g-doing', name: 'Em andamento', color: 'blue', optionIds: ['doing'] },
-          { id: 'g-done', name: 'Concluído', color: 'green', optionIds: ['done'] },
+          { id: createId('group'), name: 'A fazer', color: 'gray', optionIds: [todoId] },
+          { id: createId('group'), name: 'Em andamento', color: 'blue', optionIds: [doingId] },
+          { id: createId('group'), name: 'Concluído', color: 'green', optionIds: [doneId] },
         ],
       };
     case 'person':
-      return { id, name: 'Pessoa', type, people: [], multiple: true };
+      return { id, name: 'Pessoa', type, people, multiple: true };
     default:
       return { id, name: PROPERTY_TYPE_LABELS[type] ?? type, type } as PropertyDefinition;
   }
@@ -102,13 +109,14 @@ interface SortableRowProps {
   onChangeType: (id: string, newType: PropertyType) => void;
   onCreateOption: (propId: string, opt: SelectOption) => void;
   onUpdateOption: (propId: string, opt: SelectOption) => void;
+  onDeleteOption: (propId: string, optionId: string) => void;
 }
 
 function SortablePropertyRow({
   definition, properties, locale, renamingId, renameDraft,
   readOnly, onChange,
   onStartRename, onFinishRename, onCancelRename, onRenameDraftChange,
-  onDelete, onChangeType, onCreateOption, onUpdateOption,
+  onDelete, onChangeType, onCreateOption, onUpdateOption, onDeleteOption,
 }: SortableRowProps) {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
@@ -217,6 +225,7 @@ function SortablePropertyRow({
           onChange={(next) => onChange?.(definition.id, next)}
           onCreateOption={(opt) => onCreateOption(definition.id, opt)}
           onUpdateOption={(opt) => onUpdateOption(definition.id, opt)}
+          onDeleteOption={(optionId) => onDeleteOption(definition.id, optionId)}
         />
       </div>
     </div>
@@ -231,6 +240,8 @@ export function PropertiesPanel({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const readOnly = !onSchemaChange;
+  const availablePeople = schema.properties.flatMap((property) => property.type === 'person' ? property.people : [])
+    .filter((person, index, all) => all.findIndex((candidate) => candidate.id === person.id) === index);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -258,6 +269,7 @@ export function PropertiesPanel({
   }
 
   function deleteProperty(id: string) {
+    if (!window.confirm('Deletar esta propriedade de todas as páginas?')) return;
     onSchemaChange?.({ ...schema, properties: schema.properties.filter((p) => p.id !== id) });
   }
 
@@ -267,7 +279,7 @@ export function PropertiesPanel({
       ...schema,
       properties: schema.properties.map((p) => {
         if (p.id !== id) return p;
-        const base = buildNewProperty(newType);
+        const base = buildNewProperty(newType, availablePeople);
         return { ...base, id: p.id, name: p.name };
       }),
     });
@@ -275,8 +287,9 @@ export function PropertiesPanel({
 
   function addProperty(type: PropertyType) {
     if (!onSchemaChange) return;
-    const prop = buildNewProperty(type);
+    const prop = buildNewProperty(type, availablePeople);
     onSchemaChange({ ...schema, properties: [...schema.properties, prop] });
+    setShowHidden(true);
     setRenamingId(prop.id);
     setRenameDraft(prop.name);
   }
@@ -287,7 +300,15 @@ export function PropertiesPanel({
       ...schema,
       properties: schema.properties.map((p) => {
         if (p.id !== propId) return p;
-        if (p.type === 'select' || p.type === 'multi_select' || p.type === 'status') {
+        if (p.type === 'status') {
+          const [firstGroup, ...rest] = p.groups;
+          return {
+            ...p,
+            options: [...p.options, option],
+            groups: firstGroup ? [{ ...firstGroup, optionIds: [...firstGroup.optionIds, option.id] }, ...rest] : p.groups,
+          };
+        }
+        if (p.type === 'select' || p.type === 'multi_select') {
           return { ...p, options: [...p.options, option] };
         }
         return p;
@@ -309,14 +330,38 @@ export function PropertiesPanel({
     });
   }
 
+  function handleDeleteOption(propId: string, optionId: string) {
+    if (!onSchemaChange) return;
+    onSchemaChange({
+      ...schema,
+      properties: schema.properties.map((property) => {
+        if (property.id !== propId) return property;
+        if (property.type === 'status') {
+          return {
+            ...property,
+            options: property.options.filter((option) => option.id !== optionId),
+            groups: property.groups.map((group) => ({
+              ...group,
+              optionIds: group.optionIds.filter((id) => id !== optionId),
+            })),
+          };
+        }
+        if (property.type === 'select' || property.type === 'multi_select') {
+          return { ...property, options: property.options.filter((option) => option.id !== optionId) };
+        }
+        return property;
+      }),
+    });
+  }
+
   const visibleProps = schema.properties.filter((p) => {
     if (ALWAYS_SHOW_TYPES.includes(p.type)) return true;
     return showHidden || !isEmptyValue(properties[p.id]);
   });
 
-  const hiddenCount = schema.properties.filter((p) => {
+  const emptyPropertyCount = schema.properties.filter((p) => {
     if (ALWAYS_SHOW_TYPES.includes(p.type)) return false;
-    return !showHidden && isEmptyValue(properties[p.id]);
+    return isEmptyValue(properties[p.id]);
   }).length;
 
   const sortableIds = visibleProps.map((p) => p.id);
@@ -344,18 +389,19 @@ export function PropertiesPanel({
               onChangeType={changeType}
               onCreateOption={handleCreateOption}
               onUpdateOption={handleUpdateOption}
+              onDeleteOption={handleDeleteOption}
             />
           ))}
         </SortableContext>
       </DndContext>
 
-      {hiddenCount > 0 && (
+      {emptyPropertyCount > 0 && (
         <button type="button" className="npc-hidden-props-toggle"
           onClick={() => setShowHidden((v) => !v)}>
           {showHidden ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
           {showHidden
             ? 'Ocultar propriedades vazias'
-            : `${hiddenCount} propriedade${hiddenCount !== 1 ? 's' : ''} oculta${hiddenCount !== 1 ? 's' : ''}`}
+            : `${emptyPropertyCount} propriedade${emptyPropertyCount !== 1 ? 's' : ''} oculta${emptyPropertyCount !== 1 ? 's' : ''}`}
         </button>
       )}
 

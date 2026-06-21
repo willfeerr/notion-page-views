@@ -17,11 +17,12 @@ interface PropertyFieldProps {
   onChange?: (next: StoredPropertyValue) => void;
   onCreateOption?: (option: SelectOption) => void;
   onUpdateOption?: (option: SelectOption) => void;
+  onDeleteOption?: (optionId: string) => void;
 }
 
 export function PropertyField({
   definition, value, compact = false, locale = 'pt-BR',
-  onChange, onCreateOption, onUpdateOption,
+  onChange, onCreateOption, onUpdateOption, onDeleteOption,
 }: PropertyFieldProps) {
   switch (definition.type) {
     case 'text':
@@ -46,19 +47,22 @@ export function PropertyField({
         value={value as string | null | undefined} compact={compact}
         onChange={(v) => onChange?.(v)}
         onCreateOption={onCreateOption}
-        onUpdateOption={onUpdateOption} />;
+        onUpdateOption={onUpdateOption}
+        onDeleteOption={onDeleteOption} />;
     case 'status':
       return <SelectField variant="status" options={definition.options} groups={definition.groups}
         value={value as string | null | undefined} compact={compact}
         onChange={(v) => onChange?.(v)}
         onCreateOption={onCreateOption}
-        onUpdateOption={onUpdateOption} />;
+        onUpdateOption={onUpdateOption}
+        onDeleteOption={onDeleteOption} />;
     case 'multi_select':
       return <MultiSelectField options={definition.options}
         value={value as string[] | null | undefined} compact={compact}
         onChange={(v) => onChange?.(v)}
         onCreateOption={onCreateOption}
-        onUpdateOption={onUpdateOption} />;
+        onUpdateOption={onUpdateOption}
+        onDeleteOption={onDeleteOption} />;
     case 'person':
       return <PersonField people={definition.people}
         value={value as string[] | null | undefined} compact={compact}

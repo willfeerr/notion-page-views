@@ -58,8 +58,10 @@ export interface NotionSchema {
  * (Yjs-backed) instead of OnChangePlugin.
  */
 export interface CollabConfig {
+  /** Local cross-tab sync by default; switch to hocuspocus without changing the editor API. */
+  transport?: 'broadcast' | 'hocuspocus';
   /** Hocuspocus WebSocket URL, e.g. "ws://localhost:1234" */
-  wsUrl: string;
+  wsUrl?: string;
   /**
    * Document/room name — typically "page-{page.id}".
    * Each unique value is a separate Yjs document on the server.

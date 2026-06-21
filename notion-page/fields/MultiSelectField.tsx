@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Plus, X, Check, Search } from 'lucide-react';
-import type { PropertyColor, SelectOption } from '../types';
+import type { SelectOption } from '../types';
 import { COLOR_TOKENS, nextOptionColor } from '../propertyTokens';
 import { Popover } from './Popover';
 import { OptionColorPicker } from './OptionColorPicker';
@@ -15,6 +15,7 @@ interface MultiSelectFieldProps {
   onChange?: (next: string[]) => void;
   onCreateOption?: (option: SelectOption) => void;
   onUpdateOption?: (option: SelectOption) => void;
+  onDeleteOption?: (optionId: string) => void;
 }
 
 function Pill({ option, onRemove }: { option: SelectOption; onRemove?: () => void }) {
@@ -34,7 +35,7 @@ function Pill({ option, onRemove }: { option: SelectOption; onRemove?: () => voi
 
 export function MultiSelectField({
   options, value, compact = false, maxCompactPills = 3,
-  onChange, onCreateOption, onUpdateOption,
+  onChange, onCreateOption, onUpdateOption, onDeleteOption,
 }: MultiSelectFieldProps) {
   const selectedIds = value ?? [];
   const selectedOptions = options.filter((o) => selectedIds.includes(o.id));
@@ -65,7 +66,8 @@ export function MultiSelectField({
   function handleCreate() {
     if (!search.trim()) return;
     const newOpt: SelectOption = {
-      id: `opt-${Date.now()}`, name: search.trim(), color: nextOptionColor(options.length),
+      id: `opt-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`,
+      name: search.trim(), color: nextOptionColor(options.length),
     };
     onCreateOption?.(newOpt);
     onChange?.([...selectedIds, newOpt.id]);
@@ -104,7 +106,11 @@ export function MultiSelectField({
                 {onUpdateOption && (
                   <OptionColorPicker
                     option={option}
-                    onColorChange={(color: PropertyColor) => onUpdateOption({ ...option, color })}
+                    onUpdate={onUpdateOption}
+                    onDelete={onDeleteOption ? () => {
+                      onDeleteOption(option.id);
+                      if (selectedIds.includes(option.id)) onChange?.(selectedIds.filter((id) => id !== option.id));
+                    } : undefined}
                   />
                 )}
               </div>

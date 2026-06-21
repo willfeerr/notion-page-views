@@ -1552,6 +1552,12 @@
 .npc-option-color-dot:hover { outline-color: rgba(0,0,0,0.15); transform: scale(1.15); }
 
 .npc-color-picker-panel { padding: 8px; min-width: 170px; }
+.npc-option-edit-form { display: flex; gap: 4px; margin-bottom: 8px; }
+.npc-option-edit-form input { min-width: 0; flex: 1; border: 1px solid var(--npc-border); border-radius: 4px; padding: 5px 7px; outline: none; }
+.npc-option-edit-form input:focus { border-color: var(--npc-accent); }
+.npc-option-edit-form button { width: 28px; border: 0; border-radius: 4px; background: var(--npc-accent); color: white; display: grid; place-items: center; }
+.npc-option-delete-btn { display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 7px; padding: 6px 7px; border: 0; border-radius: 4px; background: transparent; color: #b1463e; }
+.npc-option-delete-btn:hover { background: #fae0dc; }
 .npc-color-grid-wide { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
 .npc-color-pick-btn {
   display: flex; align-items: center; gap: 8px;

@@ -1,25 +1,26 @@
-# Notion Page Views
+# Notion Pages Lab
 
-Preview interativo das views presentes no pacote `notion-page-clone-v3`.
+Aplicacao React real para testar o pacote `notion-page`: propriedades controladas, schema editavel, editor Lexical e sincronizacao local com Yjs.
 
-## Views
+## Funcionalidades
 
-- Board com drag-and-drop entre colunas, ordenacao e menus dos cards
-- Pagina completa com titulo, icone, capa e propriedades editaveis
-- Dropdowns de status, prioridade, tags e pessoas
-- Reordenacao das propriedades por drag-and-drop
-- Editor em blocos com insercao, transformacao, duplicacao e exclusao
-- Blocos arrastaveis de texto, titulo, tarefa, callout, citacao, divisor e imagem
-- Galeria dos principais componentes
-- Layout responsivo para desktop e celular
-- Persistencia local de todas as alteracoes
+- Criar, renomear, reordenar, converter e excluir propriedades
+- Editar texto, numero, select, multi-select, status, data, pessoa, checkbox, URL, email e telefone
+- Criar, renomear, colorir e excluir opcoes
+- Editar titulo, icone e capa da pagina
+- Arrastar cards entre colunas de status
+- Editar conteudo no Lexical com slash commands e blocos customizados
+- Sincronizar schema e propriedades entre abas com `Y.Doc + BroadcastChannel`
+- Sincronizar cada editor Lexical em um documento Yjs separado
+- Persistir o workspace no `localStorage`
 
-## Executar
+## Desenvolvimento
 
 ```bash
+npm install
 npm run dev
 ```
 
-Abra `http://localhost:4173`.
+O contrato de colaboracao aceita `transport: 'broadcast'` ou `transport: 'hocuspocus'`. Para migrar ao servidor, informe `wsUrl` e altere apenas o transporte.
 
-O preview nao possui dependencias e pode ser publicado diretamente no GitHub Pages. O codigo React/Lexical recebido esta preservado em `notion-page/` para a integracao posterior.
+Consulte [FIDELITY.md](./FIDELITY.md) para o mapa de fidelidade e dependencias de backend ainda necessarias.
