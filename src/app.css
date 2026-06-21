@@ -1,30 +1,35 @@
 @import '../notion-page/katex-import.css';
 @import '../notion-page/notion-page.css';
 
-:root { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #2f2b26; background: #f6f6f4; }
+:root {
+  --sk-bg: #fafafa; --sk-fg: #18181b; --sk-card: #fff; --sk-muted: #f4f4f5;
+  --sk-muted-fg: #71717a; --sk-border: #e4e4e7; --sk-primary: #18181b;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--sk-fg); background: var(--sk-bg);
+}
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; }
 button, input { font: inherit; }
 button { cursor: pointer; }
 .lab-shell { min-height: 100vh; display: grid; grid-template-columns: 220px minmax(0, 1fr); }
-.lab-sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 3px; padding: 14px 10px; border-right: 1px solid #e2e0da; background: #efefec; }
+.lab-sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 3px; padding: 14px 10px; border-right: 1px solid var(--sk-border); background: #f6f6f6; }
 .lab-brand { display: flex; align-items: center; gap: 9px; padding: 4px 7px 18px; font-size: 13px; }
 .lab-brand span { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; background: #252421; color: white; font-weight: 800; }
-.lab-sidebar > button, .lab-sidebar-foot button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; border-radius: 5px; background: transparent; color: #69655f; text-align: left; }
-.lab-sidebar > button:hover, .lab-sidebar > button.is-active, .lab-sidebar-foot button:hover { background: rgba(255,255,255,.78); color: #2f2b26; }
+.lab-sidebar > button, .lab-sidebar-foot button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--sk-muted-fg); text-align: left; }
+.lab-sidebar > button:hover, .lab-sidebar > button.is-active, .lab-sidebar-foot button:hover { background: var(--sk-muted); color: var(--sk-fg); }
 .lab-sidebar-foot { margin-top: auto; }
 .lab-main { min-width: 0; }
-.lab-topbar { position: sticky; top: 0; z-index: 50; height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 20px; border-bottom: 1px solid #e8e5df; background: rgba(255,255,255,.92); backdrop-filter: blur(10px); }
+.lab-topbar { position: sticky; top: 0; z-index: 50; height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 20px; border-bottom: 1px solid var(--sk-border); background: rgba(250,250,250,.92); backdrop-filter: blur(10px); }
 .lab-search { display: flex; align-items: center; gap: 7px; width: 240px; color: #99958e; }
 .lab-search input { width: 100%; border: 0; outline: 0; background: transparent; font-size: 12px; }
-.lab-top-actions { display: flex; align-items: center; gap: 12px; color: #928e87; font-size: 11px; }
-.lab-top-actions button, .lab-heading > button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 0; border-radius: 5px; background: #2f6188; color: white; font-size: 12px; }
+.lab-top-actions { display: flex; align-items: center; gap: 12px; color: var(--sk-muted-fg); font-size: 11px; }
+.lab-top-actions button, .lab-heading > button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 0; border-radius: 6px; background: var(--sk-primary); color: white; font-size: 12px; }
 .lab-board-view { padding: 38px clamp(22px, 4vw, 60px) 60px; }
 .lab-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 28px; }
 .lab-heading span { color: #99958e; font-size: 9px; font-weight: 750; letter-spacing: .12em; }
 .lab-heading h1 { margin: 4px 0 0; font-size: 28px; }
 .lab-board { display: grid; grid-template-columns: repeat(3, minmax(250px, 1fr)); gap: 18px; overflow-x: auto; align-items: start; }
-.lab-column { min-width: 250px; padding: 5px; border-radius: 8px; }
+.lab-column { min-width: 250px; padding: 8px; border: 1px solid var(--sk-border); border-radius: 8px; background: rgba(244,244,245,.45); }
 .lab-column:has(.is-dragging) { background: #edf3f7; }
 .lab-column > header { display: flex; align-items: center; gap: 7px; height: 35px; padding: 0 4px; font-size: 12px; font-weight: 650; }
 .lab-column > header i { width: 8px; height: 8px; border-radius: 50%; background: #9b9894; }
@@ -32,16 +37,37 @@ button { cursor: pointer; }
 .lab-column > header i[data-color="green"] { background: #5fae7e; }
 .lab-column > header b { color: #aaa7a1; font-size: 10px; }
 .lab-column > header button { margin-left: auto; border: 0; background: transparent; }
-.lab-card-list { display: grid; gap: 8px; }
-.lab-card-list > div { transition: opacity .12s, transform .12s; cursor: grab; }
-.lab-card-list > div.is-dragging { opacity: .35; transform: rotate(1deg); }
+.lab-card-list { display: grid; gap: 0; }
+.lab-card-slot > div:first-child { transition: opacity .12s, transform .12s; cursor: grab; }
+.lab-card-slot > div:first-child.is-dragging { opacity: .35; transform: rotate(1deg); }
+.lab-insert-row { height: 10px; display: flex; align-items: center; opacity: 0; transition: opacity .12s; }
+.lab-card-slot:hover .lab-insert-row, .lab-insert-row:focus-within { opacity: 1; }
+.lab-insert-row span { height: 1px; flex: 1; background: var(--sk-border); }
+.lab-insert-row button { width: 20px; height: 20px; display: grid; place-items: center; padding: 0; border: 1px solid var(--sk-border); border-radius: 50%; background: white; color: var(--sk-muted-fg); line-height: 1; }
+.lab-insert-row button:hover { color: var(--sk-fg); border-color: #a1a1aa; }
 .lab-add-card { width: 100%; margin-top: 6px; padding: 7px; border: 0; border-radius: 5px; background: transparent; color: #908c85; text-align: left; font-size: 12px; }
 .lab-add-card:hover { background: #ecebe7; }
-.lab-page-stage { min-height: calc(100vh - 52px); background: white; }
+.lab-page-stage { min-height: calc(100vh - 52px); background: var(--sk-card); }
 .lab-page-toolbar { position: sticky; top: 52px; z-index: 45; height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid #eeeae4; background: rgba(255,255,255,.94); color: #99958e; font-size: 10px; }
 .lab-page-toolbar button { display: flex; align-items: center; border: 0; border-radius: 4px; background: transparent; color: #6f6b65; padding: 5px 7px; }
 .lab-page-toolbar button:hover { background: #f1f0ed; }
 .lab-page-stage .npc-page-view { max-width: 100%; }
+.lab-embed-preview { min-height: 100vh; background: var(--sk-bg); color: var(--sk-fg); }
+.lab-embed-cover { height: 150px; background-size: cover; background-position: center; }
+.lab-embed-page { max-width: 760px; margin: 0 auto; padding: 28px 42px 48px; }
+.lab-embed-page .lab-embed-icon { display: block; margin-top: -58px; font-size: 52px; }
+.lab-embed-page > p, .lab-embed-board-preview > header p { margin: 18px 0 4px; color: var(--sk-muted-fg); font-size: 10px; font-weight: 700; }
+.lab-embed-page > h1, .lab-embed-board-preview > header h1 { margin: 0 0 18px; font-size: 26px; }
+.lab-embed-board-preview { padding: 22px; }
+.lab-embed-board-preview > header { margin-bottom: 18px; }
+.lab-embed-board { display: grid; grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: 12px; overflow-x: auto; }
+.lab-embed-board > section { min-width: 220px; padding: 8px; border: 1px solid var(--sk-border); border-radius: 8px; background: rgba(244,244,245,.45); }
+.lab-embed-board h2 { display: flex; align-items: center; gap: 7px; margin: 0 0 8px; font-size: 12px; }
+.lab-embed-board h2 i { width: 8px; height: 8px; border-radius: 50%; background: #a1a1aa; }
+.lab-embed-board h2 i[data-color="blue"] { background: #3b82f6; }
+.lab-embed-board h2 i[data-color="green"] { background: #22c55e; }
+.lab-embed-board h2 b { color: var(--sk-muted-fg); font-size: 10px; }
+.lab-embed-board .npc-card { margin-bottom: 7px; }
 
 @media (max-width: 760px) {
   .lab-shell { grid-template-columns: 1fr; }

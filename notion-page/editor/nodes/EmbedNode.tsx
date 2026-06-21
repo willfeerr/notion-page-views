@@ -7,9 +7,9 @@ import {
   type NodeKey, type SerializedLexicalNode, type Spread, createCommand, type LexicalCommand,
 } from 'lexical';
 import { useState } from 'react';
-import { ExternalLink, Video } from 'lucide-react';
+import { Columns3, ExternalLink, FileText, Video } from 'lucide-react';
 
-export type EmbedType = 'youtube' | 'generic';
+export type EmbedType = 'youtube' | 'page' | 'board' | 'generic';
 
 export type SerializedEmbedNode = Spread<
   { url: string; embedType: EmbedType; title?: string },
@@ -22,6 +22,8 @@ export const INSERT_EMBED_COMMAND: LexicalCommand<{ url: string }> =
 function classifyUrl(url: string): EmbedType {
   try {
     const u = new URL(url);
+    const workspaceType = u.searchParams.get('embed');
+    if (workspaceType === 'page' || workspaceType === 'board') return workspaceType;
     if (u.hostname.includes('youtube.com') || u.hostname.includes('youtu.be')) return 'youtube';
   } catch { /* ignore */ }
   return 'generic';
@@ -91,6 +93,24 @@ function EmbedComponent({ url, embedType, title }: { url: string; embedType: Emb
                 allowFullScreen className="npc-embed-iframe" onError={() => setError(true)} />
           }
         </div>
+      </div>
+    );
+  }
+
+  if (embedType === 'page' || embedType === 'board') {
+    const Icon = embedType === 'board' ? Columns3 : FileText;
+    const label = embedType === 'board' ? 'Board' : 'Pagina';
+    return (
+      <div className="npc-embed npc-embed-workspace">
+        <div className="npc-embed-header">
+          <Icon size={14} className="npc-embed-type-icon" />
+          <span className="npc-embed-title">{title || `${label} embed`}</span>
+          <span className="npc-embed-kind">{label}</span>
+          <a href={url} target="_blank" rel="noreferrer" className="npc-embed-link-btn"><ExternalLink size={12} /></a>
+        </div>
+        {error
+          ? <div className="npc-embed-workspace-error">Nao foi possivel carregar o documento.</div>
+          : <iframe src={embedUrl} title={title || `${label} embed`} className="npc-embed-workspace-frame" onError={() => setError(true)} />}
       </div>
     );
   }

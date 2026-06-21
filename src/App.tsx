@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, RotateCcw, Search, Settings2, X } from 'lucide-react';
 import type { SerializedEditorState } from 'lexical';
 import { NotionPageCard, NotionPageView } from '../notion-page';
+import { PropertiesPanel } from '../notion-page/PropertiesPanel';
 import { samplePages, sampleSchema } from '../notion-page/example/sampleData';
 import type { NotionPageData, NotionSchema, PropertyDefinition, StoredPropertyValue } from '../notion-page/types';
 import { Doc, Map as YMap, type YMapEvent, type Transaction } from 'yjs';
@@ -58,6 +59,10 @@ export default function App() {
   const [query, setQuery] = useState('');
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [user] = useState(() => ({ id: crypto.randomUUID(), name: 'Você', color: '#2F76B7' }));
+  const [preview] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return { kind: params.get('embed'), id: params.get('id') };
+  });
   const workspaceMapRef = useRef<YMap<string> | null>(null);
   const workspaceReadyRef = useRef(false);
 
@@ -142,7 +147,7 @@ export default function App() {
     }));
   }
 
-  function createPage(statusId?: string) {
+  function createPage(statusId?: string, afterPageId?: string) {
     const now = new Date().toISOString();
     const properties = Object.fromEntries(schema.properties.map((definition) => [definition.id, emptyValueFor(definition)]));
     if (statusDefinition && statusId) properties[statusDefinition.id] = statusId;
@@ -153,7 +158,13 @@ export default function App() {
       id: crypto.randomUUID(), icon: '📄', coverUrl: null, title: 'Sem titulo', properties,
       content: null, createdTime: now, lastEditedTime: now,
     };
-    setPages((current) => [...current, page]);
+    setPages((current) => {
+      const afterIndex = afterPageId ? current.findIndex((item) => item.id === afterPageId) : -1;
+      if (afterIndex < 0) return [...current, page];
+      const next = [...current];
+      next.splice(afterIndex + 1, 0, page);
+      return next;
+    });
     setOpenId(page.id);
     setView('page');
   }
@@ -169,6 +180,15 @@ export default function App() {
     setPages(structuredClone(samplePages));
     setOpenId(samplePages[1]?.id ?? samplePages[0]?.id ?? null);
     setView('board');
+  }
+
+  if (preview.kind === 'page') {
+    const page = pages.find((item) => item.id === preview.id) ?? pages[0];
+    return page ? <EmbeddedPagePreview schema={schema} page={page} /> : null;
+  }
+
+  if (preview.kind === 'board') {
+    return <EmbeddedBoardPreview schema={schema} pages={visiblePages} />;
   }
 
   return (
@@ -199,8 +219,15 @@ export default function App() {
                     <header><i data-color={status.color} />{status.name}<b>{columnPages.length}</b><button onClick={() => createPage(status.id)}>+</button></header>
                     <div className="lab-card-list">
                       {columnPages.map((page) => (
-                        <div key={page.id} draggable onDragStart={() => setDraggingId(page.id)} onDragEnd={() => setDraggingId(null)} className={draggingId === page.id ? 'is-dragging' : ''}>
-                          <NotionPageCard schema={schema} page={page} visiblePropertyIds={['priority', 'tags', 'assignee', 'due']} onClick={() => { setOpenId(page.id); setView('page'); }} />
+                        <div key={page.id} className="lab-card-slot">
+                          <div draggable onDragStart={() => setDraggingId(page.id)} onDragEnd={() => setDraggingId(null)} className={draggingId === page.id ? 'is-dragging' : ''}>
+                            <NotionPageCard schema={schema} page={page} visiblePropertyIds={['priority', 'tags', 'assignee', 'due']} onClick={() => { setOpenId(page.id); setView('page'); }} />
+                          </div>
+                          <div className="lab-insert-row">
+                            <span />
+                            <button type="button" onClick={() => createPage(status.id, page.id)} title="Adicionar pagina depois deste card">+</button>
+                            <span />
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -231,5 +258,39 @@ export default function App() {
         )}
       </main>
     </div>
+  );
+}
+
+function EmbeddedPagePreview({ schema, page }: { schema: NotionSchema; page: NotionPageData }) {
+  return (
+    <main className="lab-embed-preview">
+      {page.coverUrl ? <div className="lab-embed-cover" style={{ backgroundImage: `url(${page.coverUrl})`, backgroundPositionY: `${page.coverPosition ?? 50}%` }} /> : null}
+      <section className="lab-embed-page">
+        <span className="lab-embed-icon">{page.icon || '📄'}</span>
+        <p>PAGE</p>
+        <h1>{page.title || 'Sem titulo'}</h1>
+        <PropertiesPanel schema={schema} properties={page.properties} />
+      </section>
+    </main>
+  );
+}
+
+function EmbeddedBoardPreview({ schema, pages }: { schema: NotionSchema; pages: NotionPageData[] }) {
+  const status = schema.properties.find((property) => property.type === 'status');
+  const options = status?.type === 'status' ? status.options : [];
+  return (
+    <main className="lab-embed-preview lab-embed-board-preview">
+      <header><p>BOARD</p><h1>Roadmap de produto</h1></header>
+      <div className="lab-embed-board">
+        {options.map((option) => (
+          <section key={option.id}>
+            <h2><i data-color={option.color} />{option.name}<b>{pages.filter((page) => page.properties[status?.id ?? 'status'] === option.id).length}</b></h2>
+            {pages.filter((page) => page.properties[status?.id ?? 'status'] === option.id).map((page) => (
+              <NotionPageCard key={page.id} schema={schema} page={page} visiblePropertyIds={['priority', 'tags', 'assignee', 'due']} />
+            ))}
+          </section>
+        ))}
+      </div>
+    </main>
   );
 }

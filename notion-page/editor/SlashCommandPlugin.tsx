@@ -28,7 +28,7 @@ import {
   Heading1, Heading2, Heading3, Pilcrow, List, ListOrdered, ListChecks,
   Quote, Minus, Code, Table, Image, Video, FunctionSquare,
   Columns2, AlertCircle, ChevronRight, BookmarkIcon, AlignLeft,
-  ChevronsDown, type LucideIcon,
+  ChevronsDown, Columns3, FileText, type LucideIcon,
 } from 'lucide-react';
 
 class BlockOption extends MenuOption {
@@ -83,6 +83,15 @@ const CALLOUT_PRESETS: Array<{ label: string; color: CalloutColor; emoji: string
   { label: 'Callout (laranja)',  color: 'orange', emoji: '⚠️' },
   { label: 'Callout (vermelho)', color: 'red',    emoji: '🚨' },
 ];
+
+function workspaceEmbedUrl(kind: 'page' | 'board', id: string): string {
+  const url = new URL(window.location.href);
+  url.hash = '';
+  url.search = '';
+  url.searchParams.set('embed', kind);
+  url.searchParams.set('id', id);
+  return url.toString();
+}
 
 const ALL_OPTIONS: BlockOption[] = [
   // ── Básicos ──────────────────────────────────────────────────────
@@ -190,6 +199,17 @@ const ALL_OPTIONS: BlockOption[] = [
       const url = window.prompt('URL do vídeo:');
       if (url) editor.dispatchCommand(INSERT_EMBED_COMMAND, { url });
     },
+  }),
+  new BlockOption({ title: 'Page embed', description: 'Incorporar uma pagina do workspace', icon: FileText, group: 'Mídia',
+    keywords: ['page','pagina','embed','documento'],
+    onSelect: (editor) => {
+      const id = window.prompt('ID da pagina:', 'page-1')?.trim();
+      if (id) editor.dispatchCommand(INSERT_EMBED_COMMAND, { url: workspaceEmbedUrl('page', id) });
+    },
+  }),
+  new BlockOption({ title: 'Board embed', description: 'Incorporar o board do workspace', icon: Columns3, group: 'Mídia',
+    keywords: ['board','kanban','embed'],
+    onSelect: (editor) => editor.dispatchCommand(INSERT_EMBED_COMMAND, { url: workspaceEmbedUrl('board', 'roadmap') }),
   }),
 
   // ── Avançado ──────────────────────────────────────────────────────
