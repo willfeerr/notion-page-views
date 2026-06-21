@@ -26,6 +26,20 @@
   color: var(--npc-text);
 }
 
+.dark .npc-page-view,
+.dark .npc-card {
+  --npc-bg: oklch(0.21 0.006 285.885);
+  --npc-text: oklch(0.985 0 0);
+  --npc-text-secondary: oklch(0.705 0.015 286.067);
+  --npc-border: oklch(1 0 0 / 10%);
+  --npc-border-strong: oklch(1 0 0 / 15%);
+  --npc-hover: oklch(0.274 0.006 286.033);
+  --npc-accent: oklch(0.92 0.004 286.32);
+  --npc-accent-soft: oklch(0.274 0.006 286.033);
+  --npc-shadow-card: 0 1px 2px rgba(0, 0, 0, .3);
+  --npc-shadow-popover: 0 8px 24px rgba(0, 0, 0, .45);
+}
+
 /* ---------- Page header ---------- */
 
 .npc-page-view {
@@ -1060,6 +1074,19 @@
 .npc-date-range-add:hover:not(:disabled), .npc-date-range-clear:hover { background: var(--npc-hover); color: var(--npc-text); }
 .npc-date-range-add:disabled { cursor: default; opacity: .45; }
 .npc-date-range-clear { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; }
+
+.dark .npc-block-context-menu,
+.dark .npc-color-panel,
+.dark .npc-link-editor,
+.dark .npc-bookmark {
+  background: var(--npc-bg);
+  color: var(--npc-text);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .42);
+}
+.dark .npc-link-edit-input { background: var(--npc-bg); color: var(--npc-text); }
+.dark .npc-block-menu-item-danger:hover,
+.dark .npc-link-action-danger:hover,
+.dark .npc-option-delete-btn:hover { background: color-mix(in oklab, #e03e3e 16%, transparent); }
 .npc-embed-workspace-error { display: grid; min-height: 120px; place-items: center; color: var(--npc-text-secondary); font-size: 13px; }
 
 /* ═══════════════════════════════════════════════════════════════

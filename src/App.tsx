@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, GripVertical, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react';
+import { CalendarDays, GripVertical, Moon, Plus, RotateCcw, Search, Sun, Trash2, X } from 'lucide-react';
 import type { SerializedEditorState } from 'lexical';
 import { NotionPageCard, NotionPageView } from '../notion-page';
 import { PropertiesPanel } from '../notion-page/PropertiesPanel';
@@ -8,16 +8,16 @@ import type { NotionPageData, NotionSchema, PropertyDefinition, StoredPropertyVa
 import { Doc } from 'yjs';
 import { BroadcastProvider } from '../notion-page/editor/BroadcastProvider';
 import { CalendarView } from './CalendarView';
-import { WorkspaceYjsStore } from './workspaceYjs';
+import { WorkspaceYjsStore, type WorkspaceResource } from './workspaceYjs';
 
 type View = 'board' | 'calendar' | 'page';
 
 const STORAGE_KEY = 'notion-pages-real-v2';
 
-function loadState(): { schema: NotionSchema; pages: NotionPageData[] } {
+function loadState(): { schema: NotionSchema; pages: NotionPageData[]; resources?: WorkspaceResource[] } {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored) as { schema: NotionSchema; pages: NotionPageData[] };
+    if (stored) return JSON.parse(stored) as { schema: NotionSchema; pages: NotionPageData[]; resources?: WorkspaceResource[] };
   } catch { /* use seed */ }
   return { schema: structuredClone(sampleSchema), pages: structuredClone(samplePages) };
 }
@@ -55,18 +55,31 @@ export default function App() {
   const [initial] = useState(loadState);
   const [schema, setSchema] = useState(initial.schema);
   const [pages, setPages] = useState(initial.pages);
+  const [resources, setResources] = useState<WorkspaceResource[]>(initial.resources ?? []);
   const [view, setView] = useState<View>('board');
+  const [activeResourceId, setActiveResourceId] = useState('board-roadmap');
+  const [creatingType, setCreatingType] = useState<WorkspaceResource['type'] | null>(null);
   const [openId, setOpenId] = useState(initial.pages[1]?.id ?? initial.pages[0]?.id ?? null);
   const [query, setQuery] = useState('');
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingLaneId, setDraggingLaneId] = useState<string | null>(null);
   const [editingLaneId, setEditingLaneId] = useState<string | null>(null);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const stored = localStorage.getItem('skrbe-theme');
+    if (stored === 'light' || stored === 'dark') return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
   const [user] = useState(() => ({ id: crypto.randomUUID(), name: 'Você', color: '#2F76B7' }));
   const [preview] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return { kind: params.get('embed'), id: params.get('id') };
   });
   const workspaceStoreRef = useRef<WorkspaceYjsStore | null>(null);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('skrbe-theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     const document = new Doc();
@@ -77,6 +90,7 @@ export default function App() {
     const unsubscribe = store.subscribe((state) => {
       setSchema(state.schema);
       setPages(state.pages);
+      setResources(state.resources ?? []);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     });
 
@@ -89,12 +103,14 @@ export default function App() {
   }, [initial]);
 
   const openPage = pages.find((page) => page.id === openId) ?? pages[0] ?? null;
+  const activeResource = resources.find((resource) => resource.id === activeResourceId) ?? resources[0];
   const statusDefinition = schema.properties.find((property) => property.type === 'status');
   const statusOptions = statusDefinition?.type === 'status' ? statusDefinition.options : [];
   const visiblePages = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('pt-BR');
     return normalized ? pages.filter((page) => page.title.toLocaleLowerCase('pt-BR').includes(normalized)) : pages;
   }, [pages, query]);
+  const activePages = activeResource ? visiblePages.filter((page) => activeResource.pageIds.includes(page.id)) : visiblePages;
 
   function updatePage(id: string, patch: Partial<NotionPageData>) {
     const now = new Date().toISOString();
@@ -110,6 +126,11 @@ export default function App() {
     const page = pages.find((item) => item.id === pageId);
     if (!page) return;
     workspaceStoreRef.current?.updateProperty(pageId, propertyId, value);
+    const definition = schema.properties.find((property) => property.id === propertyId);
+    if (definition?.type === 'date' && value) {
+      const firstCalendar = resources.find((resource) => resource.type === 'calendar');
+      if (firstCalendar) workspaceStoreRef.current?.linkPage(firstCalendar.id, pageId);
+    }
   }
 
   function updateSchema(next: NotionSchema) {
@@ -136,6 +157,7 @@ export default function App() {
       content: null, createdTime: now, lastEditedTime: now,
     };
     workspaceStoreRef.current?.insertPage(page, afterPageId);
+    if (activeResource?.type === 'board') workspaceStoreRef.current?.linkPage(activeResource.id, page.id);
     setOpenId(page.id);
     setView('page');
   }
@@ -214,8 +236,22 @@ export default function App() {
     }
     const page: NotionPageData = { id: crypto.randomUUID(), icon: '📅', coverUrl: null, title: 'Novo evento', properties, content: null, createdTime: now, lastEditedTime: now };
     workspaceStoreRef.current?.insertPage(page);
+    if (activeResource?.type === 'calendar') workspaceStoreRef.current?.linkPage(activeResource.id, page.id);
     setOpenId(page.id);
     setView('page');
+  }
+
+  function createResource(type: WorkspaceResource['type'], title: string) {
+    const resource: WorkspaceResource = { id: `${type}-${crypto.randomUUID()}`, type, title, pageIds: [] };
+    workspaceStoreRef.current?.createResource(resource);
+    setActiveResourceId(resource.id);
+    setView(type);
+    setCreatingType(null);
+  }
+
+  function openResource(resource: WorkspaceResource) {
+    setActiveResourceId(resource.id);
+    setView(resource.type);
   }
 
   if (preview.kind === 'page') {
@@ -231,8 +267,16 @@ export default function App() {
     <div className="lab-shell">
       <aside className="lab-sidebar">
         <div className="lab-brand"><span>N</span><strong>Notion Pages Lab</strong></div>
-        <button className={view === 'board' ? 'is-active' : ''} onClick={() => setView('board')}>▦ Board</button>
-        <button className={view === 'calendar' ? 'is-active' : ''} onClick={() => setView('calendar')}><CalendarDays size={14} />Calendario</button>
+        <div className="lab-sidebar-label"><span>APPS</span><button type="button" title="Novo board" onClick={() => setCreatingType('board')}><Plus size={13} /></button></div>
+        {resources.map((resource) => (
+          <button key={resource.id} className={view === resource.type && activeResource?.id === resource.id ? 'is-active' : ''} onClick={() => openResource(resource)}>
+            {resource.type === 'calendar' ? <CalendarDays size={14} /> : <span className="lab-nav-symbol">▦</span>}{resource.title}
+          </button>
+        ))}
+        <div className="lab-sidebar-create">
+          <button type="button" onClick={() => setCreatingType('board')}><Plus size={13} />Board</button>
+          <button type="button" onClick={() => setCreatingType('calendar')}><Plus size={13} />Calendario</button>
+        </div>
         <button className={view === 'page' ? 'is-active' : ''} onClick={() => setView('page')} disabled={!openPage}>□ Pagina</button>
         <div className="lab-sidebar-foot"><button onClick={resetDemo}><RotateCcw size={14} />Restaurar demo</button></div>
       </aside>
@@ -240,15 +284,21 @@ export default function App() {
       <main className="lab-main">
         <header className="lab-topbar">
           <div className="lab-search"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar paginas" /></div>
-          <div className="lab-top-actions"><span>{pages.length} paginas · {schema.properties.length} propriedades</span><button onClick={() => createPage()}><Plus size={14} />Nova pagina</button></div>
+          <div className="lab-top-actions">
+            <span>{pages.length} paginas · {schema.properties.length} propriedades</span>
+            <button className="lab-theme-toggle" type="button" title={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+            </button>
+            <button onClick={() => createPage()}><Plus size={14} />Nova pagina</button>
+          </div>
         </header>
 
         {view === 'board' && (
           <section className="lab-board-view">
-            <div className="lab-heading"><div><span>DATABASE</span><h1>Roadmap de produto</h1></div><button onClick={() => createPage()}><Plus size={15} />Nova pagina</button></div>
+            <div className="lab-heading"><div><span>BOARD</span><h1>{activeResource?.type === 'board' ? activeResource.title : 'Board'}</h1></div><button onClick={() => createPage()}><Plus size={15} />Nova pagina</button></div>
             <div className="lab-board">
               {statusOptions.map((status) => {
-                const columnPages = visiblePages.filter((page) => page.properties[statusDefinition?.id ?? 'status'] === status.id);
+                const columnPages = activePages.filter((page) => page.properties[statusDefinition?.id ?? 'status'] === status.id);
                 return (
                   <section key={status.id} className="lab-column"
                     onDragOver={(event) => event.preventDefault()}
@@ -302,8 +352,9 @@ export default function App() {
 
         {view === 'calendar' && (
           <CalendarView
+            title={activeResource?.type === 'calendar' ? activeResource.title : 'Calendario'}
             schema={schema}
-            pages={visiblePages}
+            pages={activePages}
             onOpenPage={(pageId) => { setOpenId(pageId); setView('page'); }}
             onCreatePage={createCalendarPage}
           />
@@ -311,7 +362,7 @@ export default function App() {
 
         {view === 'page' && openPage && (
           <section className="lab-page-stage">
-            <div className="lab-page-toolbar"><button onClick={() => setView('board')}>← Board</button><span>Yjs local · sincronização entre abas</span><button title="Fechar" onClick={() => setView('board')}><X size={15} /></button></div>
+            <div className="lab-page-toolbar"><button onClick={() => setView(activeResource?.type ?? 'board')}>← {activeResource?.title ?? 'Workspace'}</button><span>Yjs local · sincronização entre abas</span><button title="Fechar" onClick={() => setView(activeResource?.type ?? 'board')}><X size={15} /></button></div>
             <NotionPageView
               schema={schema}
               page={openPage}
@@ -327,8 +378,14 @@ export default function App() {
           </section>
         )}
       </main>
+      {creatingType ? <CreateResourceDialog type={creatingType} onClose={() => setCreatingType(null)} onCreate={createResource} /> : null}
     </div>
   );
+}
+
+function CreateResourceDialog({ type, onClose, onCreate }: { type: WorkspaceResource['type']; onClose: () => void; onCreate: (type: WorkspaceResource['type'], title: string) => void }) {
+  const [title, setTitle] = useState(type === 'board' ? 'Novo board' : 'Novo calendario');
+  return <div className="lab-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><form className="lab-dialog" onSubmit={(event) => { event.preventDefault(); if (title.trim()) onCreate(type, title.trim()); }}><header><span>{type === 'board' ? '▦' : '▣'}</span><div><strong>Novo {type === 'board' ? 'Board' : 'Calendario'}</strong><small>Crie uma entidade independente no workspace.</small></div></header><label>Titulo<input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label><footer><button type="button" onClick={onClose}>Cancelar</button><button type="submit">Criar</button></footer></form></div>;
 }
 
 function EmbeddedPagePreview({ schema, page }: { schema: NotionSchema; page: NotionPageData }) {

@@ -4,11 +4,24 @@ import type { NotionPageData, NotionSchema, StoredPropertyValue } from '../notio
 export interface WorkspaceState {
   schema: NotionSchema;
   pages: NotionPageData[];
+  resources?: WorkspaceResource[];
+}
+
+export interface WorkspaceResource {
+  id: string;
+  type: 'board' | 'calendar';
+  title: string;
+  pageIds: string[];
 }
 
 function replaceArray<T>(array: YArray<T>, values: T[]): void {
   if (array.length) array.delete(0, array.length);
   if (values.length) array.insert(0, values);
+}
+
+function hasDateValue(value: StoredPropertyValue): boolean {
+  if (typeof value === 'string') return /^\d{4}-\d{2}-\d{2}/.test(value);
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value) && 'start' in value && value.start);
 }
 
 function createPageMap(page: NotionPageData): YMap<unknown> {
@@ -50,17 +63,29 @@ export class WorkspaceYjsStore {
   private readonly definitionOrder: YArray<string>;
   private readonly pageMaps: YMap<YMap<unknown>>;
   private readonly pageOrder: YArray<string>;
+  private readonly resources: YMap<string>;
+  private readonly resourceOrder: YArray<string>;
 
   constructor(private readonly document: Doc) {
     this.definitions = document.getMap<string>('schema-definitions');
     this.definitionOrder = document.getArray<string>('schema-order');
     this.pageMaps = document.getMap<YMap<unknown>>('pages');
     this.pageOrder = document.getArray<string>('page-order');
+    this.resources = document.getMap<string>('resources');
+    this.resourceOrder = document.getArray<string>('resource-order');
   }
 
   initialize(seed: WorkspaceState): void {
-    if (this.definitions.size || this.pageMaps.size) return;
-    this.replaceAll(seed);
+    if (!this.definitions.size && !this.pageMaps.size) this.replaceAll(seed);
+    if (!this.resources.size) {
+      const board: WorkspaceResource = { id: 'board-roadmap', type: 'board', title: 'Roadmap de produto', pageIds: seed.pages.map((page) => page.id) };
+      const calendar: WorkspaceResource = { id: 'calendar-product', type: 'calendar', title: 'Calendario de produto', pageIds: seed.pages.filter((page) => Object.values(page.properties).some(hasDateValue)).map((page) => page.id) };
+      this.document.transact(() => {
+        this.resources.set(board.id, JSON.stringify(board));
+        this.resources.set(calendar.id, JSON.stringify(calendar));
+        replaceArray(this.resourceOrder, [board.id, calendar.id]);
+      }, 'resource-seed');
+    }
   }
 
   subscribe(listener: (state: WorkspaceState) => void): () => void {
@@ -88,7 +113,10 @@ export class WorkspaceYjsStore {
     const unorderedPages = [...this.pageMaps.entries()]
       .filter(([id]) => !ids.includes(id))
       .map(([id, map]) => readPage(id, map));
-    return { schema: { properties: [...orderedDefinitions, ...unorderedDefinitions] }, pages: [...orderedPages, ...unorderedPages] };
+    const resourceIds = this.resourceOrder.toArray();
+    const orderedResources = resourceIds.map((id) => this.resources.get(id)).filter((resource): resource is string => Boolean(resource)).map((resource) => JSON.parse(resource) as WorkspaceResource);
+    const unorderedResources = [...this.resources.entries()].filter(([id]) => !resourceIds.includes(id)).map(([, resource]) => JSON.parse(resource) as WorkspaceResource);
+    return { schema: { properties: [...orderedDefinitions, ...unorderedDefinitions] }, pages: [...orderedPages, ...unorderedPages], resources: [...orderedResources, ...unorderedResources] };
   }
 
   replaceAll(state: WorkspaceState): void {
@@ -99,6 +127,11 @@ export class WorkspaceYjsStore {
       this.pageMaps.clear();
       state.pages.forEach((page) => this.pageMaps.set(page.id, createPageMap(page)));
       replaceArray(this.pageOrder, state.pages.map((page) => page.id));
+      if (state.resources) {
+        this.resources.clear();
+        state.resources.forEach((resource) => this.resources.set(resource.id, JSON.stringify(resource)));
+        replaceArray(this.resourceOrder, state.resources.map((resource) => resource.id));
+      }
     }, 'workspace-replace');
   }
 
@@ -118,6 +151,21 @@ export class WorkspaceYjsStore {
       const afterIndex = afterPageId ? ids.indexOf(afterPageId) : -1;
       this.pageOrder.insert(afterIndex >= 0 ? afterIndex + 1 : ids.length, [page.id]);
     }, 'page-create');
+  }
+
+  createResource(resource: WorkspaceResource): void {
+    this.document.transact(() => {
+      this.resources.set(resource.id, JSON.stringify(resource));
+      this.resourceOrder.push([resource.id]);
+    }, 'resource-create');
+  }
+
+  linkPage(resourceId: string, pageId: string): void {
+    const raw = this.resources.get(resourceId);
+    if (!raw) return;
+    const resource = JSON.parse(raw) as WorkspaceResource;
+    if (resource.pageIds.includes(pageId)) return;
+    this.resources.set(resourceId, JSON.stringify({ ...resource, pageIds: [...resource.pageIds, pageId] }));
   }
 
   updatePage(id: string, patch: Partial<NotionPageData>): void {

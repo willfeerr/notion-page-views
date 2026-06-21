@@ -2,34 +2,55 @@
 @import '../notion-page/notion-page.css';
 
 :root {
-  --sk-bg: #fafafa; --sk-fg: #18181b; --sk-card: #fff; --sk-muted: #f4f4f5;
-  --sk-muted-fg: #71717a; --sk-border: #e4e4e7; --sk-primary: #18181b;
+  --sk-bg: oklch(0.985 0 0); --sk-fg: oklch(0.141 0.005 285.823); --sk-card: oklch(1 0 0);
+  --sk-muted: oklch(0.967 0.001 286.375); --sk-muted-fg: oklch(0.552 0.016 285.938);
+  --sk-border: oklch(0.92 0.004 286.32); --sk-input: oklch(0.92 0.004 286.32);
+  --sk-primary: oklch(0.21 0.006 285.885); --sk-primary-fg: oklch(0.985 0 0);
+  --sk-sidebar: oklch(0.965 0 0); --sk-accent: oklch(0.967 0.001 286.375);
+  --sk-popover: oklch(1 0 0); --sk-ring: oklch(0.705 0.015 286.067);
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--sk-fg); background: var(--sk-bg);
 }
+.dark {
+  --sk-bg: oklch(0.141 0.005 285.823); --sk-fg: rgb(250, 250, 250); --sk-card: oklch(0.21 0.006 285.885);
+  --sk-muted: oklch(0.274 0.006 286.033); --sk-muted-fg: oklch(0.705 0.015 286.067);
+  --sk-border: oklch(1 0 0 / 10%); --sk-input: oklch(1 0 0 / 15%);
+  --sk-primary: oklch(0.92 0.004 286.32); --sk-primary-fg: oklch(0.21 0.006 285.885);
+  --sk-sidebar: oklch(0.21 0.006 285.885); --sk-accent: oklch(0.274 0.006 286.033);
+  --sk-popover: oklch(0.21 0.006 285.885); --sk-ring: oklch(0.552 0.016 285.938);
+  color-scheme: dark;
+}
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; }
+body { margin: 0; min-width: 320px; background: var(--sk-bg); color: var(--sk-fg); }
 button, input { font: inherit; }
 button { cursor: pointer; }
 .lab-shell { min-height: 100vh; display: grid; grid-template-columns: 220px minmax(0, 1fr); }
-.lab-sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 3px; padding: 14px 10px; border-right: 1px solid var(--sk-border); background: #f6f6f6; }
+.lab-sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 3px; padding: 14px 10px; border-right: 1px solid var(--sk-border); background: var(--sk-sidebar); }
 .lab-brand { display: flex; align-items: center; gap: 9px; padding: 4px 7px 18px; font-size: 13px; }
 .lab-brand span { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; background: #252421; color: white; font-weight: 800; }
 .lab-sidebar > button, .lab-sidebar-foot button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--sk-muted-fg); text-align: left; }
 .lab-sidebar > button:hover, .lab-sidebar > button.is-active, .lab-sidebar-foot button:hover { background: var(--sk-muted); color: var(--sk-fg); }
+.lab-sidebar-label { display: flex; align-items: center; justify-content: space-between; padding: 10px 7px 4px; color: var(--sk-muted-fg); font-size: 9px; font-weight: 700; }
+.lab-sidebar-label button { width: 23px; height: 23px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: inherit; }
+.lab-sidebar-label button:hover { background: var(--sk-muted); color: var(--sk-fg); }
+.lab-sidebar-create { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 5px 2px 8px; }
+.lab-sidebar-create button { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 6px 4px; border: 1px dashed var(--sk-border); border-radius: 5px; background: transparent; color: var(--sk-muted-fg); font-size: 10px; }
+.lab-sidebar-create button:hover { border-color: var(--sk-ring); background: var(--sk-muted); color: var(--sk-fg); }
+.lab-nav-symbol { width: 14px; text-align: center; }
 .lab-sidebar-foot { margin-top: auto; }
 .lab-main { min-width: 0; }
-.lab-topbar { position: sticky; top: 0; z-index: 50; height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 20px; border-bottom: 1px solid var(--sk-border); background: rgba(250,250,250,.92); backdrop-filter: blur(10px); }
+.lab-topbar { position: sticky; top: 0; z-index: 50; height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 20px; border-bottom: 1px solid var(--sk-border); background: color-mix(in oklab, var(--sk-bg) 92%, transparent); backdrop-filter: blur(10px); }
 .lab-search { display: flex; align-items: center; gap: 7px; width: 240px; color: #99958e; }
 .lab-search input { width: 100%; border: 0; outline: 0; background: transparent; font-size: 12px; }
 .lab-top-actions { display: flex; align-items: center; gap: 12px; color: var(--sk-muted-fg); font-size: 11px; }
-.lab-top-actions button, .lab-heading > button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 0; border-radius: 6px; background: var(--sk-primary); color: white; font-size: 12px; }
+.lab-top-actions button, .lab-heading > button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 0; border-radius: 6px; background: var(--sk-primary); color: var(--sk-primary-fg); font-size: 12px; }
+.lab-top-actions .lab-theme-toggle { width: 30px; height: 30px; justify-content: center; padding: 0; border: 1px solid var(--sk-border); background: var(--sk-card); color: var(--sk-muted-fg); }
 .lab-board-view { padding: 38px clamp(22px, 4vw, 60px) 60px; }
 .lab-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 28px; }
 .lab-heading span { color: #99958e; font-size: 9px; font-weight: 750; letter-spacing: .12em; }
 .lab-heading h1 { margin: 4px 0 0; font-size: 28px; }
 .lab-board { display: flex; gap: 14px; overflow-x: auto; align-items: stretch; padding-bottom: 18px; }
-.lab-column { min-width: 250px; padding: 8px; border: 1px solid var(--sk-border); border-radius: 8px; background: rgba(244,244,245,.45); }
+.lab-column { min-width: 250px; padding: 8px; border: 1px solid var(--sk-border); border-radius: 8px; background: color-mix(in oklab, var(--sk-muted) 45%, transparent); }
 .lab-column:has(.is-dragging) { background: #edf3f7; }
 .lab-column > header { display: flex; align-items: center; gap: 5px; height: 35px; padding: 0 2px; font-size: 12px; font-weight: 650; cursor: grab; }
 .lab-column > header:active { cursor: grabbing; }
@@ -38,7 +59,7 @@ button { cursor: pointer; }
 .lab-column > header i[data-color="blue"] { background: #4f8fbe; }
 .lab-column > header i[data-color="green"] { background: #5fae7e; }
 .lab-column > header b { color: #aaa7a1; font-size: 10px; }
-.lab-column > header input { min-width: 0; width: 100%; height: 25px; padding: 0 5px; border: 1px solid var(--sk-border); border-radius: 4px; outline: 0; background: white; }
+.lab-column > header input { min-width: 0; width: 100%; height: 25px; padding: 0 5px; border: 1px solid var(--sk-border); border-radius: 4px; outline: 0; background: var(--sk-card); color: var(--sk-fg); }
 .lab-column > header button { width: 25px; height: 25px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--sk-muted-fg); }
 .lab-column > header button:hover { background: var(--sk-muted); color: var(--sk-fg); }
 .lab-column > header button:disabled { opacity: .3; cursor: default; }
@@ -52,12 +73,12 @@ button { cursor: pointer; }
 .lab-insert-row { height: 10px; display: flex; align-items: center; opacity: 0; transition: opacity .12s; }
 .lab-card-slot:hover .lab-insert-row, .lab-insert-row:focus-within { opacity: 1; }
 .lab-insert-row span { height: 1px; flex: 1; background: var(--sk-border); }
-.lab-insert-row button { width: 20px; height: 20px; display: grid; place-items: center; padding: 0; border: 1px solid var(--sk-border); border-radius: 50%; background: white; color: var(--sk-muted-fg); line-height: 1; }
+.lab-insert-row button { width: 20px; height: 20px; display: grid; place-items: center; padding: 0; border: 1px solid var(--sk-border); border-radius: 50%; background: var(--sk-card); color: var(--sk-muted-fg); line-height: 1; }
 .lab-insert-row button:hover { color: var(--sk-fg); border-color: #a1a1aa; }
 .lab-add-card { width: 100%; margin-top: 6px; padding: 7px; border: 0; border-radius: 5px; background: transparent; color: #908c85; text-align: left; font-size: 12px; }
 .lab-add-card:hover { background: #ecebe7; }
 .lab-page-stage { min-height: calc(100vh - 52px); background: var(--sk-card); }
-.lab-page-toolbar { position: sticky; top: 52px; z-index: 45; height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid #eeeae4; background: rgba(255,255,255,.94); color: #99958e; font-size: 10px; }
+.lab-page-toolbar { position: sticky; top: 52px; z-index: 45; height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid var(--sk-border); background: color-mix(in oklab, var(--sk-card) 94%, transparent); color: var(--sk-muted-fg); font-size: 10px; }
 .lab-page-toolbar button { display: flex; align-items: center; border: 0; border-radius: 4px; background: transparent; color: #6f6b65; padding: 5px 7px; }
 .lab-page-toolbar button:hover { background: #f1f0ed; }
 .lab-page-stage .npc-page-view { max-width: 100%; }
@@ -80,20 +101,22 @@ button { cursor: pointer; }
 
 .lab-calendar-view { padding: 38px clamp(22px, 4vw, 60px) 60px; }
 .lab-calendar-heading { margin-bottom: 22px; }
-.lab-calendar-shell { overflow: hidden; border: 1px solid var(--sk-border); border-radius: 8px; background: white; }
+.lab-calendar-shell { overflow: hidden; border: 1px solid var(--sk-border); border-radius: 8px; background: var(--sk-card); }
 .lab-calendar-toolbar { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 10px 14px; border-bottom: 1px solid var(--sk-border); }
 .lab-calendar-toolbar > div { display: flex; align-items: center; gap: 6px; }
-.lab-calendar-toolbar button { height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border: 1px solid var(--sk-border); border-radius: 5px; background: white; color: var(--sk-muted-fg); font-size: 11px; }
-.lab-calendar-toolbar button:hover, .lab-calendar-toolbar button.is-active { background: var(--sk-primary); border-color: var(--sk-primary); color: white; }
+.lab-calendar-toolbar button { height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border: 1px solid var(--sk-border); border-radius: 5px; background: var(--sk-card); color: var(--sk-muted-fg); font-size: 11px; }
+.lab-calendar-toolbar button:hover, .lab-calendar-toolbar button.is-active { background: var(--sk-primary); border-color: var(--sk-primary); color: var(--sk-primary-fg); }
+.lab-calendar-modes { max-width: 100%; overflow-x: auto; }
+.lab-calendar-modes button { flex: 0 0 auto; }
 .lab-calendar-toolbar button.is-icon { width: 30px; padding: 0; }
 .lab-calendar-toolbar strong { margin-left: 7px; font-size: 14px; text-transform: capitalize; }
 .lab-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(110px, 1fr)); overflow-x: auto; }
 .lab-calendar-weekday { min-width: 110px; padding: 8px 10px; border-right: 1px solid var(--sk-border); color: var(--sk-muted-fg); font-size: 10px; font-weight: 700; text-transform: uppercase; }
-.lab-calendar-day { min-width: 110px; min-height: 112px; padding: 6px; border-top: 1px solid var(--sk-border); border-right: 1px solid var(--sk-border); background: white; }
-.lab-calendar-day.is-outside { background: #fafafa; color: #a1a1aa; }
+.lab-calendar-day { min-width: 110px; min-height: 112px; padding: 6px; border-top: 1px solid var(--sk-border); border-right: 1px solid var(--sk-border); background: var(--sk-card); }
+.lab-calendar-day.is-outside { background: color-mix(in oklab, var(--sk-muted) 45%, transparent); color: var(--sk-muted-fg); }
 .lab-calendar-day-number { width: 24px; height: 24px; display: grid; place-items: center; margin-left: auto; padding: 0; border: 0; border-radius: 5px; background: transparent; color: inherit; font-size: 11px; }
 .lab-calendar-day-number:hover { background: var(--sk-muted); color: var(--sk-fg); }
-.lab-calendar-day.is-today .lab-calendar-day-number { background: var(--sk-primary); color: white; }
+.lab-calendar-day.is-today .lab-calendar-day-number { background: var(--sk-primary); color: var(--sk-primary-fg); }
 .lab-calendar-events { display: grid; gap: 3px; margin-top: 3px; }
 .lab-calendar-event { width: 100%; height: 23px; display: flex; align-items: center; gap: 4px; overflow: hidden; padding: 0 6px; border: 1px solid #bfdbfe; border-radius: 4px; background: #eff6ff; color: #1d4ed8; font-size: 10px; font-weight: 650; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .lab-calendar-event.is-first { margin-right: -7px; width: calc(100% + 7px); border-radius: 4px 0 0 4px; border-right: 0; }
@@ -101,7 +124,7 @@ button { cursor: pointer; }
 .lab-calendar-event.is-last { width: calc(100% + 6px); margin-left: -6px; border-left: 0; border-radius: 0 4px 4px 0; }
 .lab-calendar-more { padding-left: 5px; color: var(--sk-muted-fg); font-size: 10px; }
 .lab-calendar-agenda { display: grid; }
-.lab-calendar-agenda > button { min-height: 62px; display: grid; grid-template-columns: 54px 30px 1fr; align-items: center; gap: 12px; padding: 8px 16px; border: 0; border-bottom: 1px solid var(--sk-border); background: white; color: var(--sk-fg); text-align: left; }
+.lab-calendar-agenda > button { min-height: 62px; display: grid; grid-template-columns: 54px 30px 1fr; align-items: center; gap: 12px; padding: 8px 16px; border: 0; border-bottom: 1px solid var(--sk-border); background: var(--sk-card); color: var(--sk-fg); text-align: left; }
 .lab-calendar-agenda > button:hover { background: var(--sk-muted); }
 .lab-calendar-agenda time { display: flex; flex-direction: column; align-items: center; color: var(--sk-muted-fg); font-size: 10px; text-transform: uppercase; }
 .lab-calendar-agenda time strong { color: var(--sk-fg); font-size: 20px; line-height: 1; }
@@ -110,6 +133,65 @@ button { cursor: pointer; }
 .lab-calendar-agenda small { color: var(--sk-muted-fg); }
 .lab-calendar-empty { min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; color: var(--sk-muted-fg); font-size: 12px; text-align: center; }
 .lab-calendar-empty strong { color: var(--sk-fg); font-size: 14px; }
+
+.lab-calendar-days-view { display: grid; grid-template-columns: 64px repeat(var(--day-count), minmax(160px, 1fr)); overflow-x: auto; }
+.lab-calendar-days-view > header { min-width: 160px; height: 48px; display: flex; align-items: center; justify-content: center; gap: 7px; border-bottom: 1px solid var(--sk-border); border-left: 1px solid var(--sk-border); color: var(--sk-muted-fg); font-size: 11px; text-transform: capitalize; }
+.lab-calendar-days-view > header strong { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 5px; color: var(--sk-fg); }
+.lab-calendar-days-view > header button { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--sk-muted-fg); }
+.lab-calendar-days-view > header button:hover { background: var(--sk-muted); color: var(--sk-fg); }
+.lab-calendar-time-gutter { border-bottom: 1px solid var(--sk-border); }
+.lab-calendar-days-view > aside { min-height: 576px; display: grid; grid-template-rows: repeat(12, 48px); color: var(--sk-muted-fg); font-size: 9px; }
+.lab-calendar-days-view > aside span { display: block; padding: 4px 7px 0 0; border-top: 1px solid var(--sk-border); text-align: right; }
+.lab-calendar-days-view > section { position: relative; min-width: 160px; min-height: 576px; border-left: 1px solid var(--sk-border); background: repeating-linear-gradient(to bottom, transparent 0, transparent 47px, var(--sk-border) 48px); }
+.lab-calendar-all-day { display: grid; gap: 4px; min-height: 86px; padding: 7px; border-bottom: 1px solid var(--sk-border); background: color-mix(in oklab, var(--sk-muted) 25%, var(--sk-card)); }
+.lab-calendar-all-day > small { color: var(--sk-muted-fg); font-size: 8px; font-weight: 700; }
+.lab-calendar-event-card { min-width: 0; display: flex; align-items: flex-start; gap: 6px; padding: 6px; border: 1px solid color-mix(in oklab, #3b82f6 35%, var(--sk-border)); border-radius: 5px; background: color-mix(in oklab, #3b82f6 12%, var(--sk-card)); color: var(--sk-fg); text-align: left; }
+.lab-calendar-event-card > span:last-child { min-width: 0; display: grid; gap: 2px; }
+.lab-calendar-event-card strong, .lab-calendar-event-card small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lab-calendar-event-card strong { font-size: 10px; }
+.lab-calendar-event-card small { color: var(--sk-muted-fg); font-size: 8px; }
+
+.lab-calendar-year { display: grid; grid-template-columns: repeat(4, minmax(190px, 1fr)); gap: 1px; background: var(--sk-border); }
+.lab-calendar-year > section { min-width: 190px; padding: 14px; background: var(--sk-card); }
+.lab-calendar-year h3 { margin: 0 0 10px; font-size: 12px; text-transform: capitalize; }
+.lab-calendar-year section > div { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.lab-calendar-year small { display: grid; place-items: center; height: 20px; color: var(--sk-muted-fg); font-size: 8px; font-weight: 700; }
+.lab-calendar-year section button { position: relative; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--sk-fg); font-size: 9px; }
+.lab-calendar-year section button:hover { background: var(--sk-muted); }
+.lab-calendar-year section button.is-outside { color: color-mix(in oklab, var(--sk-muted-fg) 45%, transparent); }
+.lab-calendar-year section button.has-event::after { content: ''; position: absolute; left: 50%; bottom: 2px; width: 3px; height: 3px; border-radius: 50%; background: #3b82f6; transform: translateX(-50%); }
+
+.lab-gantt { min-width: 900px; overflow-x: auto; }
+.lab-gantt-header, .lab-gantt-row { display: grid; grid-template-columns: 220px minmax(0, 1fr); }
+.lab-gantt-header { position: sticky; top: 0; z-index: 2; background: var(--sk-card); }
+.lab-gantt-header > strong { display: flex; align-items: center; padding: 0 14px; border-right: 1px solid var(--sk-border); border-bottom: 1px solid var(--sk-border); font-size: 10px; text-transform: uppercase; }
+.lab-gantt-header > div { display: grid; grid-auto-flow: column; grid-auto-columns: 32px; }
+.lab-gantt-header span { height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-right: 1px solid var(--sk-border); border-bottom: 1px solid var(--sk-border); color: var(--sk-muted-fg); font-size: 9px; }
+.lab-gantt-header span small { font-size: 7px; text-transform: uppercase; }
+.lab-gantt-header span.is-weekend, .lab-gantt-track i.is-weekend { background: color-mix(in oklab, var(--sk-muted) 65%, transparent); }
+.lab-gantt-row > button { min-width: 0; height: 52px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 0; border-right: 1px solid var(--sk-border); border-bottom: 1px solid var(--sk-border); background: var(--sk-card); color: var(--sk-fg); text-align: left; }
+.lab-gantt-row > button:hover { background: var(--sk-muted); }
+.lab-gantt-row > button > span:last-child { min-width: 0; display: grid; gap: 2px; }
+.lab-gantt-row > button strong, .lab-gantt-row > button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lab-gantt-row > button strong { font-size: 11px; }
+.lab-gantt-row > button small { color: var(--sk-muted-fg); font-size: 9px; }
+.lab-gantt-track { position: relative; height: 52px; display: grid; grid-auto-flow: column; grid-auto-columns: 32px; border-bottom: 1px solid var(--sk-border); }
+.lab-gantt-track i { border-right: 1px solid var(--sk-border); }
+.lab-gantt-bar { position: absolute; top: 12px; z-index: 1; height: 28px; overflow: hidden; padding: 0 8px; border: 1px solid color-mix(in oklab, #3b82f6 45%, var(--sk-border)); border-radius: 5px; background: color-mix(in oklab, #3b82f6 24%, var(--sk-card)); color: color-mix(in oklab, #3b82f6 72%, var(--sk-fg)); font-size: 9px; font-weight: 700; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+
+.lab-dialog-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: rgba(0,0,0,.58); }
+.lab-dialog { width: min(420px, 100%); overflow: hidden; border: 1px solid var(--sk-border); border-radius: 8px; background: var(--sk-popover); box-shadow: 0 18px 60px rgba(0,0,0,.35); }
+.lab-dialog header { display: flex; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid var(--sk-border); }
+.lab-dialog header > span { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 6px; background: var(--sk-muted); }
+.lab-dialog header > div { display: grid; gap: 3px; }
+.lab-dialog header strong { font-size: 14px; }
+.lab-dialog header small { color: var(--sk-muted-fg); }
+.lab-dialog label { display: grid; gap: 7px; padding: 18px; color: var(--sk-muted-fg); font-size: 11px; }
+.lab-dialog input { height: 36px; padding: 0 10px; border: 1px solid var(--sk-input); border-radius: 6px; outline: none; background: var(--sk-bg); color: var(--sk-fg); }
+.lab-dialog input:focus { border-color: var(--sk-ring); box-shadow: 0 0 0 3px color-mix(in oklab, var(--sk-ring) 20%, transparent); }
+.lab-dialog footer { display: flex; justify-content: flex-end; gap: 7px; padding: 12px 18px; border-top: 1px solid var(--sk-border); }
+.lab-dialog footer button { height: 32px; padding: 0 11px; border: 1px solid var(--sk-border); border-radius: 6px; background: var(--sk-card); color: var(--sk-fg); }
+.lab-dialog footer button[type='submit'] { border-color: var(--sk-primary); background: var(--sk-primary); color: var(--sk-primary-fg); }
 
 @media (max-width: 760px) {
   .lab-shell { grid-template-columns: 1fr; }
@@ -122,4 +204,7 @@ button { cursor: pointer; }
   .lab-column, .lab-add-lane { min-width: 270px; }
   .lab-calendar-view { padding: 24px 12px; }
   .lab-calendar-toolbar { align-items: flex-start; flex-direction: column; }
+  .lab-calendar-year { grid-template-columns: repeat(2, minmax(190px, 1fr)); overflow-x: auto; }
+  .lab-calendar-modes { width: 100%; }
+  .lab-calendar-modes button span { display: none; }
 }
