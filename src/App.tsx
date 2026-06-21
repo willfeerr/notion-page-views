@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, RotateCcw, Search, Settings2, X } from 'lucide-react';
+import { CalendarDays, GripVertical, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react';
 import type { SerializedEditorState } from 'lexical';
 import { NotionPageCard, NotionPageView } from '../notion-page';
 import { PropertiesPanel } from '../notion-page/PropertiesPanel';
 import { samplePages, sampleSchema } from '../notion-page/example/sampleData';
 import type { NotionPageData, NotionSchema, PropertyDefinition, StoredPropertyValue } from '../notion-page/types';
-import { Doc, Map as YMap, type YMapEvent, type Transaction } from 'yjs';
+import { Doc } from 'yjs';
 import { BroadcastProvider } from '../notion-page/editor/BroadcastProvider';
+import { CalendarView } from './CalendarView';
+import { WorkspaceYjsStore } from './workspaceYjs';
 
-type View = 'board' | 'page';
+type View = 'board' | 'calendar' | 'page';
 
 const STORAGE_KEY = 'notion-pages-real-v2';
-const WORKSPACE_ORIGIN = Symbol('workspace-local-change');
 
 function loadState(): { schema: NotionSchema; pages: NotionPageData[] } {
   try {
@@ -58,55 +59,32 @@ export default function App() {
   const [openId, setOpenId] = useState(initial.pages[1]?.id ?? initial.pages[0]?.id ?? null);
   const [query, setQuery] = useState('');
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [draggingLaneId, setDraggingLaneId] = useState<string | null>(null);
+  const [editingLaneId, setEditingLaneId] = useState<string | null>(null);
   const [user] = useState(() => ({ id: crypto.randomUUID(), name: 'Você', color: '#2F76B7' }));
   const [preview] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return { kind: params.get('embed'), id: params.get('id') };
   });
-  const workspaceMapRef = useRef<YMap<string> | null>(null);
-  const workspaceReadyRef = useRef(false);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ schema, pages }));
-    const map = workspaceMapRef.current;
-    if (!workspaceReadyRef.current || !map) return;
-    const serialized = JSON.stringify({ schema, pages });
-    if (map.get('snapshot') !== serialized) {
-      map.doc?.transact(() => map.set('snapshot', serialized), WORKSPACE_ORIGIN);
-    }
-  }, [schema, pages]);
+  const workspaceStoreRef = useRef<WorkspaceYjsStore | null>(null);
 
   useEffect(() => {
     const document = new Doc();
     const provider = new BroadcastProvider('notion-pages-workspace', document);
-    const map = document.getMap<string>('workspace');
-    workspaceMapRef.current = map;
-
-    const applySnapshot = () => {
-      const raw = map.get('snapshot');
-      if (!raw) return;
-      try {
-        const snapshot = JSON.parse(raw) as { schema: NotionSchema; pages: NotionPageData[] };
-        setSchema(snapshot.schema);
-        setPages(snapshot.pages);
-      } catch { /* ignore malformed remote state */ }
-    };
-    const observer = (_event: YMapEvent<string>, transaction: Transaction) => {
-      if (transaction.origin !== WORKSPACE_ORIGIN) applySnapshot();
-    };
-    map.observe(observer);
-    const initialize = window.setTimeout(() => {
-      workspaceReadyRef.current = true;
-      if (map.has('snapshot')) applySnapshot();
-      else document.transact(() => map.set('snapshot', JSON.stringify(initial)), WORKSPACE_ORIGIN);
-    }, 180);
+    const store = new WorkspaceYjsStore(document);
+    workspaceStoreRef.current = store;
+    store.initialize(initial);
+    const unsubscribe = store.subscribe((state) => {
+      setSchema(state.schema);
+      setPages(state.pages);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    });
 
     return () => {
-      window.clearTimeout(initialize);
-      map.unobserve(observer);
+      unsubscribe();
       provider.destroy();
       document.destroy();
-      workspaceMapRef.current = null;
+      workspaceStoreRef.current = null;
     };
   }, [initial]);
 
@@ -121,30 +99,29 @@ export default function App() {
   function updatePage(id: string, patch: Partial<NotionPageData>) {
     const now = new Date().toISOString();
     const editedProperty = schema.properties.find((property) => property.type === 'last_edited_time');
-    setPages((current) => current.map((page) => {
-      if (page.id !== id) return page;
-      const properties = { ...page.properties, ...(patch.properties ?? {}) };
-      if (editedProperty) properties[editedProperty.id] = now;
-      return { ...page, ...patch, lastEditedTime: now, properties };
-    }));
+    const page = pages.find((item) => item.id === id);
+    if (!page) return;
+    const properties = { ...page.properties, ...(patch.properties ?? {}) };
+    if (editedProperty) properties[editedProperty.id] = now;
+    workspaceStoreRef.current?.updatePage(id, { ...patch, lastEditedTime: now, properties });
   }
 
   function updateProperty(pageId: string, propertyId: string, value: StoredPropertyValue) {
     const page = pages.find((item) => item.id === pageId);
     if (!page) return;
-    updatePage(pageId, { properties: { ...page.properties, [propertyId]: value } });
+    workspaceStoreRef.current?.updateProperty(pageId, propertyId, value);
   }
 
   function updateSchema(next: NotionSchema) {
     const previousById = new Map(schema.properties.map((property) => [property.id, property]));
-    setSchema(next);
-    setPages((current) => current.map((page) => {
+    workspaceStoreRef.current?.setSchema(next);
+    pages.forEach((page) => {
       const properties = Object.fromEntries(next.properties.map((definition) => [
         definition.id,
         normalizePropertyValue(definition, previousById.get(definition.id), page.properties[definition.id]),
       ]));
-      return { ...page, properties };
-    }));
+      workspaceStoreRef.current?.updatePage(page.id, { properties });
+    });
   }
 
   function createPage(statusId?: string, afterPageId?: string) {
@@ -158,13 +135,7 @@ export default function App() {
       id: crypto.randomUUID(), icon: '📄', coverUrl: null, title: 'Sem titulo', properties,
       content: null, createdTime: now, lastEditedTime: now,
     };
-    setPages((current) => {
-      const afterIndex = afterPageId ? current.findIndex((item) => item.id === afterPageId) : -1;
-      if (afterIndex < 0) return [...current, page];
-      const next = [...current];
-      next.splice(afterIndex + 1, 0, page);
-      return next;
-    });
+    workspaceStoreRef.current?.insertPage(page, afterPageId);
     setOpenId(page.id);
     setView('page');
   }
@@ -176,10 +147,75 @@ export default function App() {
 
   function resetDemo() {
     if (!confirm('Restaurar schema e paginas de exemplo?')) return;
-    setSchema(structuredClone(sampleSchema));
-    setPages(structuredClone(samplePages));
+    workspaceStoreRef.current?.replaceAll({ schema: structuredClone(sampleSchema), pages: structuredClone(samplePages) });
     setOpenId(samplePages[1]?.id ?? samplePages[0]?.id ?? null);
     setView('board');
+  }
+
+  function addLane() {
+    if (!statusDefinition || statusDefinition.type !== 'status') return;
+    const id = `status-${crypto.randomUUID()}`;
+    const option = { id, name: 'Nova lane', color: 'default' as const };
+    const firstGroup = statusDefinition.groups[0];
+    updateSchema({
+      ...schema,
+      properties: schema.properties.map((property) => property.id === statusDefinition.id ? {
+        ...statusDefinition,
+        options: [...statusDefinition.options, option],
+        groups: firstGroup
+          ? [{ ...firstGroup, optionIds: [...firstGroup.optionIds, id] }, ...statusDefinition.groups.slice(1)]
+          : statusDefinition.groups,
+      } : property),
+    });
+    setEditingLaneId(id);
+  }
+
+  function renameLane(id: string, name: string) {
+    if (!statusDefinition || statusDefinition.type !== 'status' || !name.trim()) return;
+    updateSchema({ ...schema, properties: schema.properties.map((property) => property.id === statusDefinition.id
+      ? { ...statusDefinition, options: statusDefinition.options.map((option) => option.id === id ? { ...option, name: name.trim() } : option) }
+      : property) });
+  }
+
+  function deleteLane(id: string) {
+    if (!statusDefinition || statusDefinition.type !== 'status' || statusDefinition.options.length <= 1) return;
+    const lane = statusDefinition.options.find((option) => option.id === id);
+    if (!confirm(`Excluir a lane "${lane?.name ?? ''}"? Os cards serao movidos para a primeira lane.`)) return;
+    const fallback = statusDefinition.options.find((option) => option.id !== id)!;
+    updateSchema({ ...schema, properties: schema.properties.map((property) => property.id === statusDefinition.id ? {
+      ...statusDefinition,
+      options: statusDefinition.options.filter((option) => option.id !== id),
+      groups: statusDefinition.groups.map((group) => ({ ...group, optionIds: group.optionIds.filter((optionId) => optionId !== id) })),
+    } : property) });
+    pages.filter((page) => page.properties[statusDefinition.id] === id)
+      .forEach((page) => updateProperty(page.id, statusDefinition.id, fallback.id));
+  }
+
+  function reorderLane(overId: string) {
+    if (!statusDefinition || statusDefinition.type !== 'status' || !draggingLaneId || draggingLaneId === overId) return;
+    const options = [...statusDefinition.options];
+    const from = options.findIndex((option) => option.id === draggingLaneId);
+    const to = options.findIndex((option) => option.id === overId);
+    if (from < 0 || to < 0) return;
+    const [moved] = options.splice(from, 1);
+    options.splice(to, 0, moved);
+    updateSchema({ ...schema, properties: schema.properties.map((property) => property.id === statusDefinition.id ? { ...statusDefinition, options } : property) });
+    setDraggingLaneId(null);
+  }
+
+  function createCalendarPage(datePropertyId: string, date: string) {
+    const statusId = statusOptions[0]?.id;
+    const now = new Date().toISOString();
+    const properties = Object.fromEntries(schema.properties.map((definition) => [definition.id, emptyValueFor(definition)]));
+    properties[datePropertyId] = date;
+    if (statusDefinition && statusId) properties[statusDefinition.id] = statusId;
+    for (const definition of schema.properties) {
+      if (definition.type === 'created_time' || definition.type === 'last_edited_time') properties[definition.id] = now;
+    }
+    const page: NotionPageData = { id: crypto.randomUUID(), icon: '📅', coverUrl: null, title: 'Novo evento', properties, content: null, createdTime: now, lastEditedTime: now };
+    workspaceStoreRef.current?.insertPage(page);
+    setOpenId(page.id);
+    setView('page');
   }
 
   if (preview.kind === 'page') {
@@ -196,6 +232,7 @@ export default function App() {
       <aside className="lab-sidebar">
         <div className="lab-brand"><span>N</span><strong>Notion Pages Lab</strong></div>
         <button className={view === 'board' ? 'is-active' : ''} onClick={() => setView('board')}>▦ Board</button>
+        <button className={view === 'calendar' ? 'is-active' : ''} onClick={() => setView('calendar')}><CalendarDays size={14} />Calendario</button>
         <button className={view === 'page' ? 'is-active' : ''} onClick={() => setView('page')} disabled={!openPage}>□ Pagina</button>
         <div className="lab-sidebar-foot"><button onClick={resetDemo}><RotateCcw size={14} />Restaurar demo</button></div>
       </aside>
@@ -215,8 +252,31 @@ export default function App() {
                 return (
                   <section key={status.id} className="lab-column"
                     onDragOver={(event) => event.preventDefault()}
-                    onDrop={() => { if (draggingId) movePage(draggingId, status.id); setDraggingId(null); }}>
-                    <header><i data-color={status.color} />{status.name}<b>{columnPages.length}</b><button onClick={() => createPage(status.id)}>+</button></header>
+                    onDrop={() => {
+                      if (draggingId) movePage(draggingId, status.id);
+                      else reorderLane(status.id);
+                      setDraggingId(null);
+                    }}>
+                    <header draggable onDragStart={() => setDraggingLaneId(status.id)} onDragEnd={() => setDraggingLaneId(null)}>
+                      <GripVertical size={13} className="lab-lane-grip" />
+                      <i data-color={status.color} />
+                      {editingLaneId === status.id ? (
+                        <input
+                          aria-label="Nome da lane"
+                          autoFocus
+                          defaultValue={status.name}
+                          onFocus={(event) => event.currentTarget.select()}
+                          onBlur={(event) => { renameLane(status.id, event.target.value); setEditingLaneId(null); }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') event.currentTarget.blur();
+                            if (event.key === 'Escape') setEditingLaneId(null);
+                          }}
+                        />
+                      ) : <button className="lab-lane-title" type="button" title="Renomear lane" onClick={() => setEditingLaneId(status.id)}>{status.name}</button>}
+                      <b>{columnPages.length}</b>
+                      <button type="button" title="Adicionar card" onClick={() => createPage(status.id)}><Plus size={14} /></button>
+                      <button type="button" title="Excluir lane" disabled={statusOptions.length <= 1} onClick={() => deleteLane(status.id)}><Trash2 size={13} /></button>
+                    </header>
                     <div className="lab-card-list">
                       {columnPages.map((page) => (
                         <div key={page.id} className="lab-card-slot">
@@ -235,8 +295,18 @@ export default function App() {
                   </section>
                 );
               })}
+              <button className="lab-add-lane" type="button" aria-label="Adicionar lane" onClick={addLane}><Plus size={18} /><span>Adicionar lane</span></button>
             </div>
           </section>
+        )}
+
+        {view === 'calendar' && (
+          <CalendarView
+            schema={schema}
+            pages={visiblePages}
+            onOpenPage={(pageId) => { setOpenId(pageId); setView('page'); }}
+            onCreatePage={createCalendarPage}
+          />
         )}
 
         {view === 'page' && openPage && (

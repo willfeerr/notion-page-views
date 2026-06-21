@@ -1,6 +1,6 @@
 'use client';
 
-import type { PropertyDefinition, SelectOption, StoredPropertyValue } from '../types';
+import type { DateRangeValue, PropertyDefinition, SelectOption, StoredPropertyValue } from '../types';
 import { TextLikeField } from './TextLikeField';
 import { CheckboxField } from './CheckboxField';
 import { DateField } from './DateField';
@@ -40,7 +40,7 @@ export function PropertyField({
       return <CheckboxField value={value as boolean | null | undefined} compact={compact}
         onChange={(v) => onChange?.(v)} />;
     case 'date':
-      return <DateField value={value as string | null | undefined} compact={compact} locale={locale}
+      return <DateField value={value as string | DateRangeValue | null | undefined} compact={compact} locale={locale}
         onChange={(v) => onChange?.(v)} />;
     case 'select':
       return <SelectField variant="select" options={definition.options}

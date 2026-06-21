@@ -38,6 +38,11 @@ export interface PhonePropertyDefinition extends PropertyDefinitionBase { type: 
 export interface CreatedTimePropertyDefinition extends PropertyDefinitionBase { type: 'created_time'; }
 export interface LastEditedTimePropertyDefinition extends PropertyDefinitionBase { type: 'last_edited_time'; }
 
+export interface DateRangeValue {
+  start: string;
+  end?: string | null;
+}
+
 export type PropertyDefinition =
   | TextPropertyDefinition | NumberPropertyDefinition
   | SelectPropertyDefinition | MultiSelectPropertyDefinition | StatusPropertyDefinition
@@ -45,7 +50,7 @@ export type PropertyDefinition =
   | UrlPropertyDefinition | EmailPropertyDefinition | PhonePropertyDefinition
   | CreatedTimePropertyDefinition | LastEditedTimePropertyDefinition;
 
-export type StoredPropertyValue = string | number | boolean | string[] | null | undefined;
+export type StoredPropertyValue = string | number | boolean | string[] | DateRangeValue | null | undefined;
 export type PageProperties = Record<string, StoredPropertyValue>;
 
 export interface NotionSchema {

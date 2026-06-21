@@ -1,9 +1,10 @@
-import { Calendar } from 'lucide-react';
+import { Calendar, X } from 'lucide-react';
+import type { DateRangeValue } from '../types';
 
 interface DateFieldProps {
-  value: string | null | undefined;
+  value: string | DateRangeValue | null | undefined;
   compact?: boolean;
-  onChange?: (next: string | null) => void;
+  onChange?: (next: string | DateRangeValue | null) => void;
   locale?: string;
 }
 
@@ -14,22 +15,53 @@ function formatDate(iso: string, locale: string): string {
 }
 
 export function DateField({ value, compact = false, onChange, locale = 'pt-BR' }: DateFieldProps) {
+  const start = typeof value === 'string' ? value : value?.start ?? '';
+  const end = typeof value === 'object' && value ? value.end ?? '' : '';
+
   if (compact) {
-    if (!value) return <span className="npc-muted">Vazio</span>;
+    if (!start) return <span className="npc-muted">Vazio</span>;
     return (
       <span className="npc-date-value">
         <Calendar size={12} className="npc-date-icon" />
-        {formatDate(value, locale)}
+        {formatDate(start, locale)}
+        {end ? ` - ${formatDate(end, locale)}` : ''}
       </span>
     );
   }
 
   return (
-    <input
-      className="npc-text-input npc-date-input"
-      type="date"
-      value={value ? value.slice(0, 10) : ''}
-      onChange={(e) => onChange?.(e.target.value === '' ? null : e.target.value)}
-    />
+    <div className="npc-date-range-field">
+      <input
+        aria-label="Data inicial"
+        className="npc-text-input npc-date-input"
+        type="date"
+        value={start.slice(0, 10)}
+        onChange={(event) => {
+          const nextStart = event.target.value;
+          if (!nextStart) onChange?.(null);
+          else onChange?.(end ? { start: nextStart, end: end < nextStart ? nextStart : end } : nextStart);
+        }}
+      />
+      {end ? (
+        <>
+          <span className="npc-date-range-separator">ate</span>
+          <input
+            aria-label="Data final"
+            className="npc-text-input npc-date-input"
+            type="date"
+            min={start.slice(0, 10)}
+            value={end.slice(0, 10)}
+            onChange={(event) => onChange?.({ start, end: event.target.value || start })}
+          />
+          <button type="button" className="npc-date-range-clear" title="Remover data final" onClick={() => onChange?.(start || null)}>
+            <X size={12} />
+          </button>
+        </>
+      ) : (
+        <button type="button" className="npc-date-range-add" disabled={!start} onClick={() => start && onChange?.({ start, end: start })}>
+          + Data final
+        </button>
+      )}
+    </div>
   );
 }

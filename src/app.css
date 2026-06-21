@@ -28,15 +28,24 @@ button { cursor: pointer; }
 .lab-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 28px; }
 .lab-heading span { color: #99958e; font-size: 9px; font-weight: 750; letter-spacing: .12em; }
 .lab-heading h1 { margin: 4px 0 0; font-size: 28px; }
-.lab-board { display: grid; grid-template-columns: repeat(3, minmax(250px, 1fr)); gap: 18px; overflow-x: auto; align-items: start; }
+.lab-board { display: flex; gap: 14px; overflow-x: auto; align-items: stretch; padding-bottom: 18px; }
 .lab-column { min-width: 250px; padding: 8px; border: 1px solid var(--sk-border); border-radius: 8px; background: rgba(244,244,245,.45); }
 .lab-column:has(.is-dragging) { background: #edf3f7; }
-.lab-column > header { display: flex; align-items: center; gap: 7px; height: 35px; padding: 0 4px; font-size: 12px; font-weight: 650; }
+.lab-column > header { display: flex; align-items: center; gap: 5px; height: 35px; padding: 0 2px; font-size: 12px; font-weight: 650; cursor: grab; }
+.lab-column > header:active { cursor: grabbing; }
+.lab-lane-grip { flex: 0 0 auto; color: #a1a1aa; }
 .lab-column > header i { width: 8px; height: 8px; border-radius: 50%; background: #9b9894; }
 .lab-column > header i[data-color="blue"] { background: #4f8fbe; }
 .lab-column > header i[data-color="green"] { background: #5fae7e; }
 .lab-column > header b { color: #aaa7a1; font-size: 10px; }
-.lab-column > header button { margin-left: auto; border: 0; background: transparent; }
+.lab-column > header input { min-width: 0; width: 100%; height: 25px; padding: 0 5px; border: 1px solid var(--sk-border); border-radius: 4px; outline: 0; background: white; }
+.lab-column > header button { width: 25px; height: 25px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--sk-muted-fg); }
+.lab-column > header button:hover { background: var(--sk-muted); color: var(--sk-fg); }
+.lab-column > header button:disabled { opacity: .3; cursor: default; }
+.lab-column > header .lab-lane-title { width: auto; min-width: 0; flex: 1; display: block; overflow: hidden; color: var(--sk-fg); font-weight: 650; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.lab-column > header b { margin-left: auto; }
+.lab-add-lane { min-width: 250px; min-height: 170px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; border: 1px dashed #a1a1aa; border-radius: 8px; background: transparent; color: var(--sk-muted-fg); }
+.lab-add-lane:hover { border-color: var(--sk-fg); background: var(--sk-muted); color: var(--sk-fg); }
 .lab-card-list { display: grid; gap: 0; }
 .lab-card-slot > div:first-child { transition: opacity .12s, transform .12s; cursor: grab; }
 .lab-card-slot > div:first-child.is-dragging { opacity: .35; transform: rotate(1deg); }
@@ -69,6 +78,39 @@ button { cursor: pointer; }
 .lab-embed-board h2 b { color: var(--sk-muted-fg); font-size: 10px; }
 .lab-embed-board .npc-card { margin-bottom: 7px; }
 
+.lab-calendar-view { padding: 38px clamp(22px, 4vw, 60px) 60px; }
+.lab-calendar-heading { margin-bottom: 22px; }
+.lab-calendar-shell { overflow: hidden; border: 1px solid var(--sk-border); border-radius: 8px; background: white; }
+.lab-calendar-toolbar { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 10px 14px; border-bottom: 1px solid var(--sk-border); }
+.lab-calendar-toolbar > div { display: flex; align-items: center; gap: 6px; }
+.lab-calendar-toolbar button { height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border: 1px solid var(--sk-border); border-radius: 5px; background: white; color: var(--sk-muted-fg); font-size: 11px; }
+.lab-calendar-toolbar button:hover, .lab-calendar-toolbar button.is-active { background: var(--sk-primary); border-color: var(--sk-primary); color: white; }
+.lab-calendar-toolbar button.is-icon { width: 30px; padding: 0; }
+.lab-calendar-toolbar strong { margin-left: 7px; font-size: 14px; text-transform: capitalize; }
+.lab-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(110px, 1fr)); overflow-x: auto; }
+.lab-calendar-weekday { min-width: 110px; padding: 8px 10px; border-right: 1px solid var(--sk-border); color: var(--sk-muted-fg); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.lab-calendar-day { min-width: 110px; min-height: 112px; padding: 6px; border-top: 1px solid var(--sk-border); border-right: 1px solid var(--sk-border); background: white; }
+.lab-calendar-day.is-outside { background: #fafafa; color: #a1a1aa; }
+.lab-calendar-day-number { width: 24px; height: 24px; display: grid; place-items: center; margin-left: auto; padding: 0; border: 0; border-radius: 5px; background: transparent; color: inherit; font-size: 11px; }
+.lab-calendar-day-number:hover { background: var(--sk-muted); color: var(--sk-fg); }
+.lab-calendar-day.is-today .lab-calendar-day-number { background: var(--sk-primary); color: white; }
+.lab-calendar-events { display: grid; gap: 3px; margin-top: 3px; }
+.lab-calendar-event { width: 100%; height: 23px; display: flex; align-items: center; gap: 4px; overflow: hidden; padding: 0 6px; border: 1px solid #bfdbfe; border-radius: 4px; background: #eff6ff; color: #1d4ed8; font-size: 10px; font-weight: 650; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.lab-calendar-event.is-first { margin-right: -7px; width: calc(100% + 7px); border-radius: 4px 0 0 4px; border-right: 0; }
+.lab-calendar-event.is-middle { width: calc(100% + 12px); margin-left: -6px; border-right: 0; border-left: 0; border-radius: 0; }
+.lab-calendar-event.is-last { width: calc(100% + 6px); margin-left: -6px; border-left: 0; border-radius: 0 4px 4px 0; }
+.lab-calendar-more { padding-left: 5px; color: var(--sk-muted-fg); font-size: 10px; }
+.lab-calendar-agenda { display: grid; }
+.lab-calendar-agenda > button { min-height: 62px; display: grid; grid-template-columns: 54px 30px 1fr; align-items: center; gap: 12px; padding: 8px 16px; border: 0; border-bottom: 1px solid var(--sk-border); background: white; color: var(--sk-fg); text-align: left; }
+.lab-calendar-agenda > button:hover { background: var(--sk-muted); }
+.lab-calendar-agenda time { display: flex; flex-direction: column; align-items: center; color: var(--sk-muted-fg); font-size: 10px; text-transform: uppercase; }
+.lab-calendar-agenda time strong { color: var(--sk-fg); font-size: 20px; line-height: 1; }
+.lab-calendar-agenda-icon { font-size: 20px; }
+.lab-calendar-agenda > button > span:last-child { display: grid; gap: 3px; }
+.lab-calendar-agenda small { color: var(--sk-muted-fg); }
+.lab-calendar-empty { min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; color: var(--sk-muted-fg); font-size: 12px; text-align: center; }
+.lab-calendar-empty strong { color: var(--sk-fg); font-size: 14px; }
+
 @media (max-width: 760px) {
   .lab-shell { grid-template-columns: 1fr; }
   .lab-sidebar { position: static; width: 100%; height: auto; flex-direction: row; align-items: center; border-right: 0; border-bottom: 1px solid #e2e0da; }
@@ -77,5 +119,7 @@ button { cursor: pointer; }
   .lab-sidebar > button { width: auto; }
   .lab-sidebar-foot { display: none; }
   .lab-top-actions > span { display: none; }
-  .lab-board { grid-template-columns: repeat(3, 270px); }
+  .lab-column, .lab-add-lane { min-width: 270px; }
+  .lab-calendar-view { padding: 24px 12px; }
+  .lab-calendar-toolbar { align-items: flex-start; flex-direction: column; }
 }
