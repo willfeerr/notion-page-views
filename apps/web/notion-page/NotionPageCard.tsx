@@ -1,10 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import type { NotionPageData, NotionSchema } from './types';
+import type { SerializedEditorState } from 'lexical';
 import { getPlainTextPreview } from './editor/getPlainTextPreview';
+import { NotionEditor } from './editor/NotionEditor';
 import { PropertyField } from './fields/PropertyField';
+import { Popover } from './fields/Popover';
 import { PROPERTY_ICONS } from './propertyTokens';
-import { GripHorizontal } from 'lucide-react';
+import { ChevronsDownUp, ChevronsUpDown, GripHorizontal, Maximize2, Trash2 } from 'lucide-react';
+import type { StoredPropertyValue } from './types';
 
 interface NotionPageCardProps {
   schema: NotionSchema;
@@ -14,6 +19,8 @@ interface NotionPageCardProps {
   visiblePropertyIds?: string[];
   onClick?: () => void;
   onDelete?: () => void;
+  onPropertyChange?: (propertyId: string, value: StoredPropertyValue) => void;
+  onContentChange?: (content: SerializedEditorState) => void;
   showWindowControls?: boolean;
 }
 
@@ -23,8 +30,11 @@ function isEmptyValue(value: unknown): boolean {
   return false;
 }
 
-/** The "card" view: a compact, read-only summary meant to drop into a board column. */
-export function NotionPageCard({ schema, page, locale, visiblePropertyIds, onClick, onDelete, showWindowControls = false }: NotionPageCardProps) {
+/** Compact page view with lightweight property edits and opt-in body expansion. */
+const INLINE_EDITABLE_TYPES = new Set(['date', 'person', 'multi_select', 'select', 'checkbox']);
+
+export function NotionPageCard({ schema, page, locale, visiblePropertyIds, onClick, onDelete, onPropertyChange, onContentChange, showWindowControls = false }: NotionPageCardProps) {
+  const [expanded, setExpanded] = useState(false);
   const preview = getPlainTextPreview(page.content, 120);
   const visibleProperties = visiblePropertyIds
     ? schema.properties.filter((p) => visiblePropertyIds.includes(p.id))
@@ -34,6 +44,7 @@ export function NotionPageCard({ schema, page, locale, visiblePropertyIds, onCli
     <div
       className="npc-card"
       data-window-controls={showWindowControls || undefined}
+      data-expanded={expanded || undefined}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
@@ -50,32 +61,39 @@ export function NotionPageCard({ schema, page, locale, visiblePropertyIds, onCli
     >
       {showWindowControls ? (
         <div className="npc-card-window-controls" draggable={false} onPointerDown={(event) => event.stopPropagation()} onDragStart={(event) => event.preventDefault()}>
-          <button type="button" className="is-delete" title="Excluir pagina" aria-label="Excluir pagina" onClick={(event) => { event.stopPropagation(); onDelete?.(); }} />
-          <span className="is-state" title="Pagina sincronizada" />
-          <button type="button" className="is-open" title="Abrir pagina" aria-label="Abrir pagina" onClick={(event) => { event.stopPropagation(); onClick?.(); }} />
+          <button type="button" className="is-delete" title="Excluir pagina" aria-label="Excluir pagina" onClick={(event) => { event.stopPropagation(); onDelete?.(); }}><Trash2 size={8} /></button>
+          <button type="button" className="is-expand" title={expanded ? 'Recolher card' : 'Expandir e editar corpo'} aria-label={expanded ? 'Recolher card' : 'Expandir e editar corpo'} onClick={(event) => { event.stopPropagation(); setExpanded((current) => !current); }}>{expanded ? <ChevronsDownUp size={8} /> : <ChevronsUpDown size={8} />}</button>
+          <button type="button" className="is-open" title="Abrir pagina" aria-label="Abrir pagina" onClick={(event) => { event.stopPropagation(); onClick?.(); }}><Maximize2 size={8} /></button>
           <GripHorizontal size={24} className="npc-card-window-grip" />
         </div>
       ) : null}
+      {page.coverUrl && <div className="npc-card-cover" style={{ backgroundImage: `url(${page.coverUrl})` }} />}
       <div className="npc-card-body">
         <div className="npc-card-title-row">
           {page.icon && <span className="npc-card-icon">{page.icon}</span>}
           <span className="npc-card-title">{page.title || 'Sem título'}</span>
         </div>
 
-        {preview && <p className="npc-card-preview">{preview}</p>}
+        {expanded ? (
+          <div className="npc-card-expanded-editor" onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
+            <NotionEditor key={page.id} initialContent={page.content} onChange={onContentChange} placeholder="Edite o corpo da pagina..." />
+          </div>
+        ) : preview ? <p className="npc-card-preview">{preview}</p> : null}
 
         {visibleProperties.length > 0 && (
           <div className="npc-card-properties">
             {visibleProperties.map((definition) => {
               const value = page.properties[definition.id];
-              if (isEmptyValue(value) && definition.type !== 'checkbox') return null;
+              const editable = Boolean(onPropertyChange && INLINE_EDITABLE_TYPES.has(definition.type));
+              if (isEmptyValue(value) && definition.type !== 'checkbox' && !editable) return null;
               const Icon = PROPERTY_ICONS[definition.type];
-              return (
-                <span key={definition.id} className="npc-card-property">
+              if (!editable) return <span key={definition.id} className="npc-card-property"><Icon size={12} className="npc-card-property-icon" strokeWidth={2} /><PropertyField definition={definition} value={value} compact locale={locale} /></span>;
+              return <Popover key={definition.id} align="left" trigger={({ open, toggle }) => (
+                <button type="button" className={`npc-card-property npc-card-property-trigger${open ? ' is-open' : ''}`} title={`Editar ${definition.name}`} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); toggle(); }}>
                   <Icon size={12} className="npc-card-property-icon" strokeWidth={2} />
                   <PropertyField definition={definition} value={value} compact locale={locale} />
-                </span>
-              );
+                </button>
+              )}>{() => <div className="npc-card-property-editor" onClick={(event) => event.stopPropagation()}><strong>{definition.name}</strong><PropertyField definition={definition} value={value} locale={locale} onChange={(next) => onPropertyChange?.(definition.id, next)} /></div>}</Popover>;
             })}
           </div>
         )}

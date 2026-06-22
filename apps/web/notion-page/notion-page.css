@@ -26,8 +26,7 @@
   font-family: var(--npc-font);
   color: var(--npc-text);
 }
-.npc-card[data-window-controls] { height: 160px; overflow: visible; }
-.npc-card[data-window-controls] .npc-card-body { height: 158px; overflow: hidden; }
+.npc-card[data-window-controls] { min-height: 128px; overflow: visible; }
 .npc-card-window-controls {
   position: absolute; z-index: 8; left: -1px; right: -1px; top: -24px;
   height: 24px; display: flex; align-items: center; gap: 8px; padding: 0 8px;
@@ -38,13 +37,15 @@
 }
 .lab-card-slot:hover .npc-card-window-controls,
 .npc-card:focus-within .npc-card-window-controls { opacity: 1; pointer-events: auto; }
-.npc-card-window-controls button, .npc-card-window-controls .is-state {
+.npc-card-window-controls button {
   width: 12px; height: 12px; display: grid; place-items: center; padding: 0;
   flex: 0 0 12px; border: 0; border-radius: 50%; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 16%);
 }
 .npc-card-window-controls .is-delete { background: #ef5b50; }
-.npc-card-window-controls .is-state { background: #eab43f; }
+.npc-card-window-controls .is-expand { background: #eab43f; }
 .npc-card-window-controls .is-open { background: #43b75d; }
+.npc-card-window-controls button svg { opacity: .18; transition: opacity 100ms; }
+.npc-card-window-controls button:hover svg, .npc-card-window-controls button:focus-visible svg { opacity: .85; }
 .npc-card-window-grip { width: 50%; margin-left: auto; opacity: .45; cursor: grab; }
 
 .dark .npc-page-view,
@@ -857,7 +858,7 @@
 .npc-card {
   display: block;
   width: 100%;
-  height: 160px;
+  min-height: 128px;
   background: var(--npc-bg);
   border: 1px solid var(--npc-border);
   border-radius: var(--npc-radius-lg);
@@ -875,18 +876,25 @@
   transition: box-shadow 0.12s ease, border-color 0.12s ease;
 }
 .lab-card-slot:hover .npc-card[data-window-controls], .npc-card[data-window-controls]:focus-within { border-radius: 0 0 var(--npc-radius-lg) var(--npc-radius-lg); }
+.lab-card-slot:hover .npc-card[data-window-controls] .npc-card-cover, .npc-card[data-window-controls]:focus-within .npc-card-cover { border-radius: 0; }
 .npc-card[role='button']:focus-visible {
   outline: 2px solid var(--npc-accent);
   outline-offset: 1px;
 }
 
+.npc-card-cover {
+  height: 82px;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--npc-hover);
+  border-radius: var(--npc-radius-lg) var(--npc-radius-lg) 0 0;
+}
+
 .npc-card-body {
-  height: 100%;
-  padding: 10px 12px;
+  padding: 11px 12px 12px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  overflow: hidden;
+  gap: 7px;
 }
 
 .npc-card-title-row {
@@ -895,14 +903,14 @@
   gap: 6px;
 }
 .npc-card-icon {
-  font-size: 18px;
-  line-height: 1.3;
+  font-size: 16px;
+  line-height: 1.4;
   flex-shrink: 0;
 }
 .npc-card-title {
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.2;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.35;
   color: var(--npc-text);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -912,7 +920,7 @@
 
 .npc-card-preview {
   margin: 0;
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--npc-text-secondary);
   line-height: 1.45;
   display: -webkit-box;
@@ -924,10 +932,10 @@
 .npc-card-properties {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 8px;
-  margin-top: auto;
-  max-height: 38px;
-  overflow: hidden;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 2px;
+  overflow: visible;
 }
 
 .npc-card-property {
@@ -936,17 +944,29 @@
   gap: 4px;
   min-width: 0;
   max-width: 100%;
-  font-size: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
   color: var(--npc-text-secondary);
+  text-align: left;
 }
-.npc-card-property:nth-child(n + 3) { display: none; }
 .npc-card-property > :last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .npc-card-property-icon {
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
   flex-shrink: 0;
   opacity: 0.65;
 }
+.npc-card-property-trigger { min-height: 24px; margin: -3px; padding: 3px; border-radius: 4px; cursor: pointer; }
+.npc-card-property-trigger:hover, .npc-card-property-trigger.is-open { background: var(--npc-hover); color: var(--npc-text); }
+.npc-card-property-editor { width: min(280px, calc(100vw - 84px)); display: grid; gap: 10px; padding: 12px; }
+.npc-card-property-editor > strong { color: var(--npc-text-secondary); font-size: 11px; font-weight: 650; }
+.npc-card-expanded-editor { min-height: 190px; padding: 8px 0 2px; border-top: 1px solid var(--npc-border); border-bottom: 1px solid var(--npc-border); }
+.npc-card-expanded-editor .npc-editor-content-editable { min-height: 160px; font-size: 14px; line-height: 1.55; }
+.npc-card-expanded-editor .npc-editor-placeholder { font-size: 14px; }
+.npc-card[data-expanded] { min-height: 360px; }
+.npc-card[data-expanded] .npc-card-preview { -webkit-line-clamp: unset; }
 
 /* ═══════════════════════════════════════════════════════════════
    CALLOUT BLOCK

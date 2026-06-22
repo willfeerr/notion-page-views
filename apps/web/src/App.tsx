@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { DndContext, PointerSensor, TouchSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { CalendarDays, FileJson, FileText, GripVertical, Moon, PanelLeftClose, PanelLeftOpen, Plus, RotateCcw, Search, Sun, Trash2, X } from 'lucide-react';
 import type { SerializedEditorState } from 'lexical';
 import { NotionEditor, NotionPageCard, NotionPageView } from '../notion-page';
@@ -18,6 +19,21 @@ import {
 type View = 'board' | 'calendar' | 'page';
 
 const STORAGE_KEY = 'notion-pages-real-v2';
+
+function BoardLaneDrop({ statusId, children, onLaneDrop }: { statusId: string; children: ReactNode; onLaneDrop: () => void }) {
+  const { isOver, setNodeRef } = useDroppable({ id: `board-lane:${statusId}`, data: { statusId } });
+  return <section ref={setNodeRef} className={`lab-column${isOver ? ' is-dnd-over' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={onLaneDrop}>{children}</section>;
+}
+
+function BoardCardDnd({ pageId, statusId, dragging, card, after }: { pageId: string; statusId: string; dragging: boolean; card: ReactNode; after: ReactNode }) {
+  const draggable = useDraggable({ id: `board-card:${pageId}`, data: { pageId } });
+  const droppable = useDroppable({ id: `board-card-drop:${pageId}`, data: { statusId, beforePageId: pageId } });
+  const style = draggable.transform ? { transform: `translate3d(${draggable.transform.x}px, ${draggable.transform.y}px, 0)` } as CSSProperties : undefined;
+  return <div ref={droppable.setNodeRef} className={`lab-card-slot${droppable.isOver ? ' is-dnd-over' : ''}`}>
+    <div ref={draggable.setNodeRef} {...draggable.attributes} {...draggable.listeners} style={style} className={`lab-board-card-drag${dragging ? ' is-dragging' : ''}`}>{card}</div>
+    {after}
+  </div>;
+}
 
 function loadState(): { schema: NotionSchema; pages: NotionPageData[]; resources?: WorkspaceResource[] } {
   try {
@@ -65,6 +81,10 @@ export default function App() {
     return { kind: params.get('embed'), id: params.get('id') };
   });
   const workspaceStoreRef = useRef<WorkspaceYjsStore | null>(null);
+  const boardSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
+  );
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -198,6 +218,17 @@ export default function App() {
   function movePage(pageId: string, statusId: string) {
     if (!statusDefinition) return;
     updateProperty(pageId, statusDefinition.id, statusId);
+  }
+
+  function finishBoardCardDrag(event: DragEndEvent) {
+    const pageId = event.active.data.current?.pageId as string | undefined;
+    const statusId = event.over?.data.current?.statusId as string | undefined;
+    const beforePageId = event.over?.data.current?.beforePageId as string | undefined;
+    if (pageId && statusId) {
+      movePage(pageId, statusId);
+      if (activeResource && beforePageId && beforePageId !== pageId) workspaceStoreRef.current?.reorderResourcePage(activeResource.id, pageId, beforePageId);
+    }
+    setDraggingId(null);
   }
 
   function resetDemo() {
@@ -407,17 +438,12 @@ export default function App() {
         {view === 'board' && (
           <section className="lab-board-view">
             <div className="lab-heading"><div><span>BOARD</span><h1>{activeResource?.type === 'board' ? activeResource.title : 'Board'}</h1></div><button onClick={() => createBoardPage()}><Plus size={15} />Novo card</button></div>
+            <DndContext sensors={boardSensors} onDragStart={(event) => { const pageId = event.active.data.current?.pageId; setDraggingId(typeof pageId === 'string' ? pageId : null); }} onDragCancel={() => setDraggingId(null)} onDragEnd={finishBoardCardDrag}>
             <div className="lab-board">
               {statusOptions.map((status) => {
                 const columnPages = activePages.filter((page) => page.properties[statusDefinition?.id ?? 'status'] === status.id);
                 return (
-                  <section key={status.id} className="lab-column"
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={() => {
-                      if (draggingId) movePage(draggingId, status.id);
-                      else reorderLane(status.id);
-                      setDraggingId(null);
-                    }}>
+                  <BoardLaneDrop key={status.id} statusId={status.id} onLaneDrop={() => reorderLane(status.id)}>
                     <header draggable onDragStart={() => setDraggingLaneId(status.id)} onDragEnd={() => setDraggingLaneId(null)}>
                       <GripVertical size={13} className="lab-lane-grip" />
                       <i data-color={status.color} />
@@ -440,30 +466,20 @@ export default function App() {
                     </header>
                     <div className="lab-card-list">
                       {columnPages.map((page) => (
-                        <div key={page.id} className="lab-card-slot" onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
-                          event.stopPropagation();
-                          if (!draggingId || !activeResource || draggingId === page.id) return;
-                          movePage(draggingId, status.id);
-                          workspaceStoreRef.current?.reorderResourcePage(activeResource.id, draggingId, page.id);
-                          setDraggingId(null);
-                        }}>
-                          <div draggable onDragStart={() => setDraggingId(page.id)} onDragEnd={() => setDraggingId(null)} className={draggingId === page.id ? 'is-dragging' : ''}>
-                          <NotionPageCard schema={activeSchema} page={page} visiblePropertyIds={activeSchema.properties.filter((property) => property.id !== statusDefinition?.id).slice(0, 4).map((property) => property.id)} showWindowControls onDelete={() => workspaceStoreRef.current?.deletePage(page.id)} onClick={() => { setOpenId(page.id); setView('page'); }} />
-                          </div>
-                          <div className="lab-insert-row">
+                        <BoardCardDnd key={page.id} pageId={page.id} statusId={status.id} dragging={draggingId === page.id} card={<NotionPageCard schema={activeSchema} page={page} visiblePropertyIds={activeSchema.properties.filter((property) => property.id !== statusDefinition?.id).slice(0, 4).map((property) => property.id)} showWindowControls onDelete={() => workspaceStoreRef.current?.deletePage(page.id)} onPropertyChange={(propertyId, value) => updateProperty(page.id, propertyId, value)} onContentChange={(content) => updatePage(page.id, { content })} onClick={() => { setOpenId(page.id); setView('page'); }} />} after={<div className="lab-insert-row">
                             <span />
                             <button type="button" onClick={() => createBoardPage(status.id, page.id)} title="Adicionar pagina depois deste card">+</button>
                             <span />
-                          </div>
-                        </div>
+                          </div>} />
                       ))}
                     </div>
                     <button className="lab-add-card" onClick={() => createBoardPage(status.id)}>+ Novo card</button>
-                  </section>
+                  </BoardLaneDrop>
                 );
               })}
               <button className="lab-add-lane" type="button" aria-label="Adicionar lane" onClick={addLane}><Plus size={18} /><span>Adicionar lane</span></button>
             </div>
+            </DndContext>
           </section>
         )}
 
