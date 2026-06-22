@@ -26,28 +26,26 @@
   font-family: var(--npc-font);
   color: var(--npc-text);
 }
-.npc-card[data-window-controls] { min-height: 150px; overflow: visible; }
-.npc-card[data-window-controls] .npc-card-body { max-height: 150px; overflow: hidden; }
+.npc-card[data-window-controls] { height: 160px; overflow: visible; }
+.npc-card[data-window-controls] .npc-card-body { height: 158px; overflow: hidden; }
 .npc-card-window-controls {
-  position: absolute; z-index: 8; left: -1px; right: -1px; top: -25px;
-  height: 25px; display: flex; align-items: center; gap: 7px; padding: 0 8px;
+  position: absolute; z-index: 8; left: -1px; right: -1px; top: -24px;
+  height: 24px; display: flex; align-items: center; gap: 8px; padding: 0 8px;
   border: 1px solid var(--npc-border); border-bottom: 0; border-radius: 6px 6px 0 0;
   background: var(--npc-bg); color: var(--npc-text-secondary);
-  opacity: 0; pointer-events: none; transform: translateY(3px);
-  transition: opacity 120ms, transform 120ms;
+  opacity: 0; pointer-events: none;
+  transition: opacity 120ms;
 }
 .lab-card-slot:hover .npc-card-window-controls,
-.npc-card:focus-within .npc-card-window-controls { opacity: 1; pointer-events: auto; transform: translateY(0); }
+.npc-card:focus-within .npc-card-window-controls { opacity: 1; pointer-events: auto; }
 .npc-card-window-controls button, .npc-card-window-controls .is-state {
   width: 12px; height: 12px; display: grid; place-items: center; padding: 0;
-  border: 0; border-radius: 50%; color: rgb(0 0 0 / 58%);
+  flex: 0 0 12px; border: 0; border-radius: 50%; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 16%);
 }
-.npc-card-window-controls button svg { opacity: 0; }
-.npc-card-window-controls button:hover svg { opacity: 1; }
 .npc-card-window-controls .is-delete { background: #ef5b50; }
 .npc-card-window-controls .is-state { background: #eab43f; }
 .npc-card-window-controls .is-open { background: #43b75d; }
-.npc-card-window-grip { margin-left: auto; opacity: .55; }
+.npc-card-window-grip { width: 50%; margin-left: auto; opacity: .45; cursor: grab; }
 
 .dark .npc-page-view,
 .dark .npc-card {
@@ -859,6 +857,7 @@
 .npc-card {
   display: block;
   width: 100%;
+  height: 160px;
   background: var(--npc-bg);
   border: 1px solid var(--npc-border);
   border-radius: var(--npc-radius-lg);
@@ -872,27 +871,22 @@
 }
 .npc-card[role='button']:hover {
   border-color: var(--npc-border-strong);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
-  transform: translateY(-1px);
-  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.09);
+  transition: box-shadow 0.12s ease, border-color 0.12s ease;
 }
+.lab-card-slot:hover .npc-card[data-window-controls], .npc-card[data-window-controls]:focus-within { border-radius: 0 0 var(--npc-radius-lg) var(--npc-radius-lg); }
 .npc-card[role='button']:focus-visible {
   outline: 2px solid var(--npc-accent);
   outline-offset: 1px;
 }
 
-.npc-card-cover {
-  height: 82px;
-  background-size: cover;
-  background-position: center;
-  background-color: var(--npc-hover);
-}
-
 .npc-card-body {
-  padding: 12px 14px;
+  height: 100%;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
+  overflow: hidden;
 }
 
 .npc-card-title-row {
@@ -901,13 +895,14 @@
   gap: 6px;
 }
 .npc-card-icon {
-  font-size: 16px;
-  line-height: 1.4;
+  font-size: 18px;
+  line-height: 1.3;
   flex-shrink: 0;
 }
 .npc-card-title {
-  font-size: 14.5px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
   color: var(--npc-text);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -917,9 +912,9 @@
 
 .npc-card-preview {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--npc-text-secondary);
-  line-height: 1.5;
+  line-height: 1.45;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -929,20 +924,28 @@
 .npc-card-properties {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 2px;
+  gap: 4px 8px;
+  margin-top: auto;
+  max-height: 38px;
+  overflow: hidden;
 }
 
 .npc-card-property {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 10px;
   color: var(--npc-text-secondary);
 }
+.npc-card-property:nth-child(n + 3) { display: none; }
+.npc-card-property > :last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .npc-card-property-icon {
+  width: 10px;
+  height: 10px;
   flex-shrink: 0;
-  opacity: 0.8;
+  opacity: 0.65;
 }
 
 /* ═══════════════════════════════════════════════════════════════

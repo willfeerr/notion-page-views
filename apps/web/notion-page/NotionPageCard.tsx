@@ -4,7 +4,7 @@ import type { NotionPageData, NotionSchema } from './types';
 import { getPlainTextPreview } from './editor/getPlainTextPreview';
 import { PropertyField } from './fields/PropertyField';
 import { PROPERTY_ICONS } from './propertyTokens';
-import { GripHorizontal, Maximize2, Trash2 } from 'lucide-react';
+import { GripHorizontal } from 'lucide-react';
 
 interface NotionPageCardProps {
   schema: NotionSchema;
@@ -50,13 +50,12 @@ export function NotionPageCard({ schema, page, locale, visiblePropertyIds, onCli
     >
       {showWindowControls ? (
         <div className="npc-card-window-controls" draggable={false} onPointerDown={(event) => event.stopPropagation()} onDragStart={(event) => event.preventDefault()}>
-          <button type="button" className="is-delete" title="Excluir pagina" onClick={(event) => { event.stopPropagation(); onDelete?.(); }}><Trash2 size={10} /></button>
+          <button type="button" className="is-delete" title="Excluir pagina" aria-label="Excluir pagina" onClick={(event) => { event.stopPropagation(); onDelete?.(); }} />
           <span className="is-state" title="Pagina sincronizada" />
-          <button type="button" className="is-open" title="Abrir pagina" onClick={(event) => { event.stopPropagation(); onClick?.(); }}><Maximize2 size={10} /></button>
-          <GripHorizontal size={18} className="npc-card-window-grip" />
+          <button type="button" className="is-open" title="Abrir pagina" aria-label="Abrir pagina" onClick={(event) => { event.stopPropagation(); onClick?.(); }} />
+          <GripHorizontal size={24} className="npc-card-window-grip" />
         </div>
       ) : null}
-      {page.coverUrl && <div className="npc-card-cover" style={{ backgroundImage: `url(${page.coverUrl})` }} />}
       <div className="npc-card-body">
         <div className="npc-card-title-row">
           {page.icon && <span className="npc-card-icon">{page.icon}</span>}
