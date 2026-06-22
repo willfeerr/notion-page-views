@@ -46,7 +46,9 @@
 .npc-card-window-controls .is-open { background: #43b75d; }
 .npc-card-window-controls button svg { opacity: .18; transition: opacity 100ms; }
 .npc-card-window-controls button:hover svg, .npc-card-window-controls button:focus-visible svg { opacity: .85; }
-.npc-card-window-grip { width: 50%; margin-left: auto; opacity: .45; cursor: grab; }
+.npc-card-window-controls .npc-card-window-grip { width: 50%; height: 20px; flex: 0 1 50%; margin-left: auto; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: transparent; box-shadow: none; color: var(--npc-text-secondary); opacity: .55; cursor: grab; touch-action: none; }
+.npc-card-window-controls .npc-card-window-grip:hover { background: var(--npc-hover); opacity: 1; }
+.npc-card-window-controls .npc-card-window-grip:active { cursor: grabbing; }
 
 .dark .npc-page-view,
 .dark .npc-card {
@@ -896,6 +898,7 @@
   flex-direction: column;
   gap: 7px;
 }
+.npc-card-footer { display: grid; gap: 8px; padding: 8px 12px 10px; border-top: 1px solid var(--npc-border); background: color-mix(in oklab, var(--npc-bg) 94%, var(--npc-hover)); }
 
 .npc-card-title-row {
   display: flex;
@@ -934,7 +937,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 8px;
-  margin-top: 2px;
+  margin-top: 0;
   overflow: visible;
 }
 
@@ -967,6 +970,15 @@
 .npc-card-expanded-editor .npc-editor-placeholder { font-size: 14px; }
 .npc-card[data-expanded] { min-height: 360px; }
 .npc-card[data-expanded] .npc-card-preview { -webkit-line-clamp: unset; }
+.npc-card-quick-actions { display: flex; align-items: center; gap: 5px; overflow-x: auto; }
+.npc-card-quick-actions a, .npc-card-quick-actions button { min-width: 0; height: 26px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex: 0 0 auto; padding: 0 7px; border: 1px solid var(--npc-border); border-radius: 5px; background: var(--npc-bg); color: var(--npc-text-secondary); font: 500 10px/1 var(--npc-font); text-decoration: none; }
+.npc-card-quick-actions a:hover, .npc-card-quick-actions button:hover { border-color: var(--npc-border-strong); background: var(--npc-hover); color: var(--npc-text); }
+
+@media (hover: none) {
+  .lab-card-slot { padding-top: 24px; }
+  .npc-card-window-controls { opacity: 1; pointer-events: auto; }
+  .npc-card-window-controls button svg { opacity: .55; }
+}
 
 /* ═══════════════════════════════════════════════════════════════
    CALLOUT BLOCK
@@ -1000,6 +1012,8 @@
   .npc-text-input { min-height: 34px; font-size: 16px; }
   .npc-editor-wrap { display: block; }
   .npc-toc { width: auto; position: static; margin-bottom: 20px; }
+  .npc-card-quick-actions a, .npc-card-quick-actions button { width: 30px; padding: 0; }
+  .npc-card-quick-actions span { display: none; }
 }
 .npc-callout-gray    { background: #f1f0ee; border-color: #9b9894; }
 .npc-callout-brown   { background: #f1e7de; border-color: #b0876a; }

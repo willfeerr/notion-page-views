@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ButtonHTMLAttributes } from 'react';
 import type { NotionPageData, NotionSchema } from './types';
 import type { SerializedEditorState } from 'lexical';
 import { getPlainTextPreview } from './editor/getPlainTextPreview';
@@ -10,6 +10,7 @@ import { Popover } from './fields/Popover';
 import { PROPERTY_ICONS } from './propertyTokens';
 import { ChevronsDownUp, ChevronsUpDown, GripHorizontal, Maximize2, Trash2 } from 'lucide-react';
 import type { StoredPropertyValue } from './types';
+import { CardQuickActions, type CardQuickAction } from './CardQuickActions';
 
 interface NotionPageCardProps {
   schema: NotionSchema;
@@ -21,6 +22,8 @@ interface NotionPageCardProps {
   onDelete?: () => void;
   onPropertyChange?: (propertyId: string, value: StoredPropertyValue) => void;
   onContentChange?: (content: SerializedEditorState) => void;
+  quickActions?: CardQuickAction[];
+  dragHandleProps?: ButtonHTMLAttributes<HTMLButtonElement>;
   showWindowControls?: boolean;
 }
 
@@ -33,7 +36,7 @@ function isEmptyValue(value: unknown): boolean {
 /** Compact page view with lightweight property edits and opt-in body expansion. */
 const INLINE_EDITABLE_TYPES = new Set(['date', 'person', 'multi_select', 'select', 'checkbox']);
 
-export function NotionPageCard({ schema, page, locale, visiblePropertyIds, onClick, onDelete, onPropertyChange, onContentChange, showWindowControls = false }: NotionPageCardProps) {
+export function NotionPageCard({ schema, page, locale, visiblePropertyIds, onClick, onDelete, onPropertyChange, onContentChange, quickActions, dragHandleProps, showWindowControls = false }: NotionPageCardProps) {
   const [expanded, setExpanded] = useState(false);
   const preview = getPlainTextPreview(page.content, 120);
   const visibleProperties = visiblePropertyIds
@@ -64,7 +67,7 @@ export function NotionPageCard({ schema, page, locale, visiblePropertyIds, onCli
           <button type="button" className="is-delete" title="Excluir pagina" aria-label="Excluir pagina" onClick={(event) => { event.stopPropagation(); onDelete?.(); }}><Trash2 size={8} /></button>
           <button type="button" className="is-expand" title={expanded ? 'Recolher card' : 'Expandir e editar corpo'} aria-label={expanded ? 'Recolher card' : 'Expandir e editar corpo'} onClick={(event) => { event.stopPropagation(); setExpanded((current) => !current); }}>{expanded ? <ChevronsDownUp size={8} /> : <ChevronsUpDown size={8} />}</button>
           <button type="button" className="is-open" title="Abrir pagina" aria-label="Abrir pagina" onClick={(event) => { event.stopPropagation(); onClick?.(); }}><Maximize2 size={8} /></button>
-          <GripHorizontal size={24} className="npc-card-window-grip" />
+          <button type="button" {...dragHandleProps} className="npc-card-window-grip" title="Arrastar card" aria-label="Arrastar card" onClick={(event) => event.stopPropagation()}><GripHorizontal size={20} /></button>
         </div>
       ) : null}
       {page.coverUrl && <div className="npc-card-cover" style={{ backgroundImage: `url(${page.coverUrl})` }} />}
@@ -80,6 +83,8 @@ export function NotionPageCard({ schema, page, locale, visiblePropertyIds, onCli
           </div>
         ) : preview ? <p className="npc-card-preview">{preview}</p> : null}
 
+      </div>
+      <footer className="npc-card-footer">
         {visibleProperties.length > 0 && (
           <div className="npc-card-properties">
             {visibleProperties.map((definition) => {
@@ -97,7 +102,8 @@ export function NotionPageCard({ schema, page, locale, visiblePropertyIds, onCli
             })}
           </div>
         )}
-      </div>
+        <CardQuickActions schema={schema} page={page} actions={quickActions} />
+      </footer>
     </div>
   );
 }

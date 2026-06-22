@@ -1,6 +1,8 @@
 // Views
 export { NotionPageView } from './NotionPageView';
 export { NotionPageCard } from './NotionPageCard';
+export { CardQuickActions } from './CardQuickActions';
+export type { CardQuickAction, CardQuickActionKind } from './CardQuickActions';
 export { PropertiesPanel } from './PropertiesPanel';
 export { PageHeader } from './PageHeader';
 

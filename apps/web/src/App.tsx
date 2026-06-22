@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from 'react';
 import { DndContext, PointerSensor, TouchSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { CalendarDays, FileJson, FileText, GripVertical, Moon, PanelLeftClose, PanelLeftOpen, Plus, RotateCcw, Search, Sun, Trash2, X } from 'lucide-react';
 import type { SerializedEditorState } from 'lexical';
@@ -25,12 +25,13 @@ function BoardLaneDrop({ statusId, children, onLaneDrop }: { statusId: string; c
   return <section ref={setNodeRef} className={`lab-column${isOver ? ' is-dnd-over' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={onLaneDrop}>{children}</section>;
 }
 
-function BoardCardDnd({ pageId, statusId, dragging, card, after }: { pageId: string; statusId: string; dragging: boolean; card: ReactNode; after: ReactNode }) {
+function BoardCardDnd({ pageId, statusId, dragging, renderCard, after }: { pageId: string; statusId: string; dragging: boolean; renderCard: (dragHandleProps: ButtonHTMLAttributes<HTMLButtonElement>) => ReactNode; after: ReactNode }) {
   const draggable = useDraggable({ id: `board-card:${pageId}`, data: { pageId } });
   const droppable = useDroppable({ id: `board-card-drop:${pageId}`, data: { statusId, beforePageId: pageId } });
   const style = draggable.transform ? { transform: `translate3d(${draggable.transform.x}px, ${draggable.transform.y}px, 0)` } as CSSProperties : undefined;
+  const dragHandleProps = { ...draggable.attributes, ...draggable.listeners } as ButtonHTMLAttributes<HTMLButtonElement>;
   return <div ref={droppable.setNodeRef} className={`lab-card-slot${droppable.isOver ? ' is-dnd-over' : ''}`}>
-    <div ref={draggable.setNodeRef} {...draggable.attributes} {...draggable.listeners} style={style} className={`lab-board-card-drag${dragging ? ' is-dragging' : ''}`}>{card}</div>
+    <div ref={draggable.setNodeRef} style={style} className={`lab-board-card-drag${dragging ? ' is-dragging' : ''}`}>{renderCard(dragHandleProps)}</div>
     {after}
   </div>;
 }
@@ -466,7 +467,7 @@ export default function App() {
                     </header>
                     <div className="lab-card-list">
                       {columnPages.map((page) => (
-                        <BoardCardDnd key={page.id} pageId={page.id} statusId={status.id} dragging={draggingId === page.id} card={<NotionPageCard schema={activeSchema} page={page} visiblePropertyIds={activeSchema.properties.filter((property) => property.id !== statusDefinition?.id).slice(0, 4).map((property) => property.id)} showWindowControls onDelete={() => workspaceStoreRef.current?.deletePage(page.id)} onPropertyChange={(propertyId, value) => updateProperty(page.id, propertyId, value)} onContentChange={(content) => updatePage(page.id, { content })} onClick={() => { setOpenId(page.id); setView('page'); }} />} after={<div className="lab-insert-row">
+                        <BoardCardDnd key={page.id} pageId={page.id} statusId={status.id} dragging={draggingId === page.id} renderCard={(dragHandleProps) => <NotionPageCard schema={activeSchema} page={page} visiblePropertyIds={activeSchema.properties.filter((property) => property.id !== statusDefinition?.id).slice(0, 4).map((property) => property.id)} showWindowControls dragHandleProps={dragHandleProps} onDelete={() => workspaceStoreRef.current?.deletePage(page.id)} onPropertyChange={(propertyId, value) => updateProperty(page.id, propertyId, value)} onContentChange={(content) => updatePage(page.id, { content })} onClick={() => { setOpenId(page.id); setView('page'); }} />} after={<div className="lab-insert-row">
                             <span />
                             <button type="button" onClick={() => createBoardPage(status.id, page.id)} title="Adicionar pagina depois deste card">+</button>
                             <span />
