@@ -345,7 +345,7 @@ export default function App() {
   }
 
   return (
-    <div className="lab-shell">
+    <div className={`lab-shell is-${view}`}>
       <aside className="lab-sidebar">
         <div className="lab-brand"><span>N</span><strong>Notion Pages Lab</strong></div>
         <div className="lab-sidebar-label"><span>APPS</span><button type="button" title="Novo board" onClick={() => setCreatingType('board')}><Plus size={13} /></button></div>
