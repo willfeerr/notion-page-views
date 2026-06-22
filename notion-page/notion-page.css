@@ -1693,6 +1693,14 @@
 .npc-editor-content-editable [data-lexical-selected-text] {
   background-color: color-mix(in srgb, var(--collab-color, #3B82F6) 25%, transparent);
 }
+.npc-local-cursor-label {
+  position: fixed; z-index: 10000; max-width: 240px;
+  padding: 2px 6px; border-radius: 4px 4px 4px 0;
+  color: #fff; font-size: 10px; font-weight: 650; line-height: 15px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  pointer-events: none; transform: translate(-1px, -19px);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+}
 
 /* ═══════════════════════════════════════════════════════════════
    TEXT ALIGNMENT

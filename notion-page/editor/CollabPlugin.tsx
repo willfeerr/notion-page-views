@@ -8,7 +8,7 @@
  * may mirror debounced JSON snapshots for indexing and export.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CollaborationPlugin } from '@lexical/react/LexicalCollaborationPlugin';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import type { Provider } from '@lexical/yjs';
@@ -24,6 +24,11 @@ interface CollabPluginProps extends CollabConfig {
 export function CollabPlugin({ transport = 'broadcast', wsUrl, room, user, initialContent, onPresenceChange }: CollabPluginProps) {
   const providerRef = useRef<Provider | null>(null);
   const [presenceProvider, setPresenceProvider] = useState<Provider | null>(null);
+  const awarenessData = useMemo(() => ({
+    userId: user.id,
+    color: user.color,
+    location: user.location ?? 'Corpo do documento',
+  }), [user.color, user.id, user.location]);
 
   const providerFactory = useCallback((id: string, yjsDocMap: Map<string, Doc>) => {
     if (providerRef.current) return providerRef.current;
@@ -76,7 +81,7 @@ export function CollabPlugin({ transport = 'broadcast', wsUrl, room, user, initi
       initialEditorState={initialContent ? JSON.stringify(initialContent) : null}
       username={`${user.name} · ${user.location ?? 'Corpo'}`}
       cursorColor={user.color}
-      awarenessData={{ userId: user.id, color: user.color, location: user.location ?? 'Corpo do documento' }}
+      awarenessData={awarenessData}
     />
   );
 }
