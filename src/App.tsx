@@ -12,7 +12,7 @@ import { WorkspaceYjsStore } from './workspaceYjs';
 import { downloadJson, pageExport, pageSearchText, resourceExport } from './exportJson';
 import {
   buildProperty, createId, emptyValueFor, normalizeDateValue, schemaForResource,
-  type WorkspaceResource,
+  type BoardResource, type CalendarResource, type WorkspaceResource,
 } from './domain';
 
 type View = 'board' | 'calendar' | 'page';
@@ -35,7 +35,7 @@ export default function App() {
   const [view, setView] = useState<View>('board');
   const [activeResourceId, setActiveResourceId] = useState('board-roadmap');
   const [creatingType, setCreatingType] = useState<WorkspaceResource['type'] | null>(null);
-  const [openId, setOpenId] = useState(initial.pages[1]?.id ?? initial.pages[0]?.id ?? null);
+  const [openId, setOpenId] = useState<string | null>(initial.pages[1]?.id ?? initial.pages[0]?.id ?? null);
   const [query, setQuery] = useState('');
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingLaneId, setDraggingLaneId] = useState<string | null>(null);
@@ -298,14 +298,14 @@ export default function App() {
   }
 
   if (preview.kind === 'board') {
-    const resource = resources.find((item) => item.type === 'board' && item.id === preview.id)
-      ?? resources.find((item) => item.type === 'board');
+    const resource = resources.find((item): item is BoardResource => item.type === 'board' && item.id === preview.id)
+      ?? resources.find((item): item is BoardResource => item.type === 'board');
     return resource ? <EmbeddedBoardPreview resource={resource} schema={schemaForResource(schema, resource)} pages={pages.filter((page) => resource.pageIds.includes(page.id))} /> : null;
   }
 
   if (preview.kind === 'calendar') {
-    const resource = resources.find((item) => item.type === 'calendar' && item.id === preview.id)
-      ?? resources.find((item) => item.type === 'calendar');
+    const resource = resources.find((item): item is CalendarResource => item.type === 'calendar' && item.id === preview.id)
+      ?? resources.find((item): item is CalendarResource => item.type === 'calendar');
     return resource ? <CalendarView title={resource.title} schema={schemaForResource(schema, resource)} pages={pages.filter((page) => resource.pageIds.includes(page.id))} datePropertyId={resource.datePropertyId} timezone={resource.timezone} defaultView={resource.defaultView} visibleHours={resource.visibleHours} onOpenPage={() => undefined} onCreatePage={() => undefined} onMoveEvent={() => undefined} /> : null;
   }
 
