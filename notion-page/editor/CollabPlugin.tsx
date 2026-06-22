@@ -55,9 +55,9 @@ export function CollabPlugin({ transport = 'broadcast', wsUrl, room, user, initi
       onPresenceChange(presence);
     };
     publish();
-    presenceProvider.awareness.on('change', publish);
+    presenceProvider.awareness.on('update', publish);
     return () => {
-      presenceProvider.awareness.off('change', publish);
+      presenceProvider.awareness.off('update', publish);
       onPresenceChange([]);
     };
   }, [onPresenceChange, presenceProvider, user.location]);
