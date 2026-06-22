@@ -22,7 +22,7 @@ function isEmptyValue(value: unknown): boolean {
 
 /** The "card" view: a compact, read-only summary meant to drop into a board column. */
 export function NotionPageCard({ schema, page, locale, visiblePropertyIds, onClick }: NotionPageCardProps) {
-  const preview = getPlainTextPreview(page.content, 120);
+  const preview = page.contentPreview ?? getPlainTextPreview(page.content, 120);
   const visibleProperties = visiblePropertyIds
     ? schema.properties.filter((p) => visiblePropertyIds.includes(p.id))
     : schema.properties;

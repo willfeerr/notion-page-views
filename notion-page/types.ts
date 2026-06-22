@@ -57,11 +57,7 @@ export interface NotionSchema {
   properties: PropertyDefinition[];
 }
 
-/**
- * Config for Hocuspocus real-time collaboration.
- * When provided, the editor uses LexicalCollaborationPlugin
- * (Yjs-backed) instead of OnChangePlugin.
- */
+/** Yjs collaboration config. BroadcastChannel is local; Hocuspocus is remote. */
 export interface CollabConfig {
   /** Local cross-tab sync by default; switch to hocuspocus without changing the editor API. */
   transport?: 'broadcast' | 'hocuspocus';
@@ -88,11 +84,10 @@ export interface NotionPageData {
   coverPosition?: number;
   title: string;
   properties: PageProperties;
-  /**
-   * Only used in local (non-collab) mode as initial state seed.
-   * In collab mode, content lives in the Yjs doc on the Hocuspocus server.
-   */
+  /** Initial bootstrap only. In collaboration mode, content lives in the page Y.Doc. */
   content: SerializedEditorState | null;
+  /** Small derived excerpt used by database views without loading the page Y.Doc. */
+  contentPreview?: string;
   createdTime: string;
   lastEditedTime: string;
 }

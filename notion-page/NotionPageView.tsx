@@ -19,6 +19,7 @@ interface NotionPageViewProps {
   onCoverPositionChange?: (pos: number) => void;
   onPropertyChange?: (propertyId: string, value: StoredPropertyValue) => void;
   onContentChange?: (content: SerializedEditorState) => void;
+  onContentPreviewChange?: (preview: string) => void;
   onSchemaChange?: (schema: NotionSchema) => void;
 }
 
@@ -39,6 +40,7 @@ export function NotionPageView({
   schema, page, locale, collab,
   onTitleChange, onIconChange, onCoverChange, onCoverPositionChange,
   onPropertyChange, onContentChange, onSchemaChange,
+  onContentPreviewChange,
 }: NotionPageViewProps) {
   const [fullWidth, setFullWidth] = useState(false);
   const [smallFont, setSmallFont] = useState(false);
@@ -102,6 +104,7 @@ export function NotionPageView({
           key={collab ? `collab-${collab.room}` : page.id}
           initialContent={page.content}
           onChange={onContentChange}
+          onTextPreviewChange={onContentPreviewChange}
           collab={collab}
           mentionPeople={mentionPeople}
           showWordCount

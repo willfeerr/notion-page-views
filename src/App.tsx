@@ -5,11 +5,11 @@ import { NotionPageCard, NotionPageView } from '../notion-page';
 import { PropertiesPanel } from '../notion-page/PropertiesPanel';
 import { samplePages, sampleSchema } from '../notion-page/example/sampleData';
 import type { NotionPageData, NotionSchema, PropertyDefinition, StoredPropertyValue } from '../notion-page/types';
-import { Doc } from 'yjs';
 import { BroadcastProvider } from '../notion-page/editor/BroadcastProvider';
 import { CalendarView } from './CalendarView';
 import { WorkspaceYjsStore, type WorkspaceResource } from './workspaceYjs';
 import { downloadJson, pageExport, resourceExport } from './exportJson';
+import { ROOM_NAMES } from './yjs/model';
 
 type View = 'board' | 'calendar' | 'page';
 
@@ -74,6 +74,7 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     return { kind: params.get('embed'), id: params.get('id') };
   });
+  const [user] = useState(() => ({ id: crypto.randomUUID(), name: 'Você', color: '#2F76B7' }));
   const workspaceStoreRef = useRef<WorkspaceYjsStore | null>(null);
 
   useEffect(() => {
@@ -82,22 +83,18 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    const document = new Doc();
-    const provider = new BroadcastProvider('notion-pages-workspace', document);
-    const store = new WorkspaceYjsStore(document);
+    const store = new WorkspaceYjsStore((room, document) => new BroadcastProvider(room, document));
     workspaceStoreRef.current = store;
     store.initialize(initial);
     const unsubscribe = store.subscribe((state) => {
       setSchema(state.schema);
       setPages(state.pages);
       setResources(state.resources ?? []);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     });
 
     return () => {
       unsubscribe();
-      provider.destroy();
-      document.destroy();
+      store.destroy();
       workspaceStoreRef.current = null;
     };
   }, [initial]);
@@ -171,6 +168,9 @@ export default function App() {
 
   function resetDemo() {
     if (!confirm('Restaurar schema e paginas de exemplo?')) return;
+    const pageIds = new Set([...pages, ...samplePages].map((page) => page.id));
+    pageIds.forEach((pageId) => localStorage.removeItem(`notion-yjs:${ROOM_NAMES.page(pageId)}`));
+    localStorage.removeItem(STORAGE_KEY);
     workspaceStoreRef.current?.replaceAll({ schema: structuredClone(sampleSchema), pages: structuredClone(samplePages) });
     setOpenId(samplePages[1]?.id ?? samplePages[0]?.id ?? null);
     setView('board');
@@ -377,7 +377,7 @@ export default function App() {
           <section className="lab-page-stage">
             <div className="lab-page-toolbar">
               <button onClick={() => setView(activeResource?.type ?? 'board')}>← {activeResource?.title ?? 'Workspace'}</button>
-              <span>Salvo no Yjs local</span>
+              <span>Yjs local · workspace / database / view / page</span>
               <div><button type="button" title="Exportar pagina como JSON" onClick={() => downloadJson(openPage.title, pageExport(openPage, schema))}><FileJson size={14} />Exportar JSON</button><button title="Fechar" onClick={() => setView(activeResource?.type ?? 'board')}><X size={15} /></button></div>
             </div>
             <NotionPageView
@@ -388,8 +388,12 @@ export default function App() {
               onCoverChange={(coverUrl) => updatePage(openPage.id, { coverUrl })}
               onCoverPositionChange={(coverPosition) => updatePage(openPage.id, { coverPosition })}
               onPropertyChange={(propertyId, value) => updateProperty(openPage.id, propertyId, value)}
-              onContentChange={(content: SerializedEditorState) => updatePage(openPage.id, { content })}
+              onContentChange={(content: SerializedEditorState) => workspaceStoreRef.current?.updatePageContent(openPage.id, content)}
+              onContentPreviewChange={(contentPreview) => {
+                if (contentPreview !== openPage.contentPreview) updatePage(openPage.id, { contentPreview });
+              }}
               onSchemaChange={updateSchema}
+              collab={{ transport: 'broadcast', room: ROOM_NAMES.page(openPage.id), user }}
             />
           </section>
         )}

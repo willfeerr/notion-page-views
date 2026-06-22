@@ -1,12 +1,6 @@
 'use client';
 
-/**
- * Hocuspocus collaboration plugin for Lexical.
- *
- * Wraps CollaborationPlugin from @lexical/react, wiring HocuspocusProvider
- * as the Yjs provider. In collab mode: HistoryPlugin and OnChangePlugin
- * must NOT be mounted — Yjs handles both undo history and persistence.
- */
+/** Lexical collaboration bridge for local BroadcastChannel or Hocuspocus. */
 
 import { useEffect, useRef } from 'react';
 import { CollaborationPlugin } from '@lexical/react/LexicalCollaborationPlugin';

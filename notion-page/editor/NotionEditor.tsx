@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LexicalComposer, type InitialConfigType } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
@@ -15,7 +15,7 @@ import { MarkdownShortcutPlugin } from '@lexical/react/LexicalMarkdownShortcutPl
 import { AutoLinkPlugin } from '@lexical/react/LexicalAutoLinkPlugin';
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
 import { TRANSFORMERS } from '@lexical/markdown';
-import type { EditorState, SerializedEditorState } from 'lexical';
+import { $getRoot, type EditorState, type SerializedEditorState } from 'lexical';
 import { editorTheme } from './theme';
 import { editorNodes } from './nodes';
 import { FloatingToolbarPlugin } from './FloatingToolbarPlugin';
@@ -56,6 +56,7 @@ const AUTOLINK_MATCHERS = [
 interface NotionEditorProps {
   initialContent?: SerializedEditorState | null;
   onChange?: (content: SerializedEditorState) => void;
+  onTextPreviewChange?: (preview: string) => void;
   editable?: boolean;
   placeholder?: string;
   collab?: CollabConfig;
@@ -67,6 +68,7 @@ interface NotionEditorProps {
 export function NotionEditor({
   initialContent,
   onChange,
+  onTextPreviewChange,
   editable = true,
   placeholder = "Escreva algo, ou '/' para comandos…",
   collab,
@@ -75,6 +77,11 @@ export function NotionEditor({
   showTableOfContents = false,
 }: NotionEditorProps) {
   const [containerElem, setContainerElem] = useState<HTMLDivElement | null>(null);
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+  }, []);
 
   const initialConfig: InitialConfigType = {
     namespace: collab ? `collab-${collab.room}` : 'notion-page',
@@ -86,8 +93,15 @@ export function NotionEditor({
   };
 
   const handleChange = useCallback(
-    (editorState: EditorState) => { onChange?.(editorState.toJSON()); },
-    [onChange],
+    (editorState: EditorState) => {
+      onChange?.(editorState.toJSON());
+      if (!onTextPreviewChange) return;
+      const preview = editorState.read(() => $getRoot().getTextContent())
+        .replace(/\s+/g, ' ').trim().slice(0, 240);
+      if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+      previewTimerRef.current = setTimeout(() => onTextPreviewChange(preview), 350);
+    },
+    [onChange, onTextPreviewChange],
   );
 
   return (
@@ -139,9 +153,10 @@ export function NotionEditor({
             <>
               <HistoryPlugin />
               <SerializedStateSyncPlugin value={initialContent} />
-              {onChange && <OnChangePlugin onChange={handleChange} ignoreSelectionChange />}
             </>
           )}
+
+          {(onChange || onTextPreviewChange) && <OnChangePlugin onChange={handleChange} ignoreSelectionChange />}
 
           {showWordCount && <WordCountPlugin />}
         </div>

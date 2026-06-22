@@ -18,7 +18,7 @@ This repository now runs the real React/Lexical components. The table separates 
 | Board cards | Implemented | Status columns and card drag between columns |
 | Rich-text editor | Implemented | Real Lexical state, slash menu and custom nodes |
 | Images, embeds, bookmarks and math | Implemented | URL-based MVP nodes |
-| Local persistence | Implemented | Schema/page snapshot plus persisted binary Yjs state per room |
+| Local persistence | Implemented | Separate workspace, database, view and page Yjs rooms |
 | Real-time collaboration | Implemented locally | Yjs over BroadcastChannel; Hocuspocus transport adapter is ready |
 | Files property | Missing | Requires upload/storage contract |
 | Formula | Missing | Requires expression engine and dependency graph |
