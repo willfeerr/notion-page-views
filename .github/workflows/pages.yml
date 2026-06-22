@@ -42,7 +42,7 @@ jobs:
       (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/stabilization-v3')) ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'codex/stabilization-v3')
     environment:
-      name: github-pages
+      name: ${{ github.ref == 'refs/heads/main' && 'github-pages' || 'github-pages-preview' }}
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
