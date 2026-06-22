@@ -38,7 +38,7 @@ jobs:
 
   deploy:
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/stabilization-v3')
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
