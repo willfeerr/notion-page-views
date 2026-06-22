@@ -33,6 +33,7 @@ import { TableOfContentsPlugin } from './TableOfContentsPlugin';
 import { CollabPlugin } from './CollabPlugin';
 import type { CollabConfig, PersonOption } from '../types';
 import { MentionPlugin } from './MentionPlugin';
+import { SerializedStateSyncPlugin } from './SerializedStateSyncPlugin';
 
 // URL matchers for AutoLinkPlugin
 const URL_MATCHER = /((https?:\/\/|www\.|ftp\.)((\w+:\w+@)?[\w-]+(\.[\w-]+)+(:\d+)?(\/[^\s]*)?)|[\w-]+\.[\w-]{2,}(\/[^\s]*)?)/i;
@@ -137,6 +138,7 @@ export function NotionEditor({
           ) : (
             <>
               <HistoryPlugin />
+              <SerializedStateSyncPlugin value={initialContent} />
               {onChange && <OnChangePlugin onChange={handleChange} ignoreSelectionChange />}
             </>
           )}

@@ -45,6 +45,8 @@ button { cursor: pointer; }
 .lab-top-actions { display: flex; align-items: center; gap: 12px; color: var(--sk-muted-fg); font-size: 11px; }
 .lab-top-actions button, .lab-heading > button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 0; border-radius: 6px; background: var(--sk-primary); color: var(--sk-primary-fg); font-size: 12px; }
 .lab-top-actions .lab-theme-toggle { width: 30px; height: 30px; justify-content: center; padding: 0; border: 1px solid var(--sk-border); background: var(--sk-card); color: var(--sk-muted-fg); }
+.lab-top-actions .lab-export-button { border: 1px solid var(--sk-border); background: var(--sk-card); color: var(--sk-muted-fg); }
+.lab-top-actions .lab-export-button:hover, .lab-top-actions .lab-theme-toggle:hover { background: var(--sk-muted); color: var(--sk-fg); }
 .lab-board-view { padding: 38px clamp(22px, 4vw, 60px) 60px; }
 .lab-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 28px; }
 .lab-heading span { color: #99958e; font-size: 9px; font-weight: 750; letter-spacing: .12em; }
@@ -79,8 +81,9 @@ button { cursor: pointer; }
 .lab-add-card:hover { background: #ecebe7; }
 .lab-page-stage { min-height: calc(100vh - 52px); background: var(--sk-card); }
 .lab-page-toolbar { position: sticky; top: 52px; z-index: 45; height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid var(--sk-border); background: color-mix(in oklab, var(--sk-card) 94%, transparent); color: var(--sk-muted-fg); font-size: 10px; }
-.lab-page-toolbar button { display: flex; align-items: center; border: 0; border-radius: 4px; background: transparent; color: #6f6b65; padding: 5px 7px; }
-.lab-page-toolbar button:hover { background: #f1f0ed; }
+.lab-page-toolbar button { display: flex; align-items: center; gap: 5px; border: 0; border-radius: 4px; background: transparent; color: var(--sk-muted-fg); padding: 5px 7px; }
+.lab-page-toolbar button:hover { background: var(--sk-muted); color: var(--sk-fg); }
+.lab-page-toolbar > div { display: flex; align-items: center; gap: 3px; }
 .lab-page-stage .npc-page-view { max-width: 100%; }
 .lab-embed-preview { min-height: 100vh; background: var(--sk-bg); color: var(--sk-fg); }
 .lab-embed-cover { height: 150px; background-size: cover; background-position: center; }

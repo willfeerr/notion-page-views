@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, GripVertical, Moon, Plus, RotateCcw, Search, Sun, Trash2, X } from 'lucide-react';
+import { CalendarDays, FileJson, GripVertical, Moon, Plus, RotateCcw, Search, Sun, Trash2, X } from 'lucide-react';
 import type { SerializedEditorState } from 'lexical';
 import { NotionPageCard, NotionPageView } from '../notion-page';
 import { PropertiesPanel } from '../notion-page/PropertiesPanel';
@@ -9,6 +9,7 @@ import { Doc } from 'yjs';
 import { BroadcastProvider } from '../notion-page/editor/BroadcastProvider';
 import { CalendarView } from './CalendarView';
 import { WorkspaceYjsStore, type WorkspaceResource } from './workspaceYjs';
+import { downloadJson, pageExport, resourceExport } from './exportJson';
 
 type View = 'board' | 'calendar' | 'page';
 
@@ -69,7 +70,6 @@ export default function App() {
     if (stored === 'light' || stored === 'dark') return stored;
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
-  const [user] = useState(() => ({ id: crypto.randomUUID(), name: 'Você', color: '#2F76B7' }));
   const [preview] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return { kind: params.get('embed'), id: params.get('id') };
@@ -117,9 +117,11 @@ export default function App() {
     const editedProperty = schema.properties.find((property) => property.type === 'last_edited_time');
     const page = pages.find((item) => item.id === id);
     if (!page) return;
-    const properties = { ...page.properties, ...(patch.properties ?? {}) };
-    if (editedProperty) properties[editedProperty.id] = now;
-    workspaceStoreRef.current?.updatePage(id, { ...patch, lastEditedTime: now, properties });
+    const nextPatch: Partial<NotionPageData> = { ...patch, lastEditedTime: now };
+    const changedProperties = { ...(patch.properties ?? {}) };
+    if (editedProperty) changedProperties[editedProperty.id] = now;
+    if (Object.keys(changedProperties).length) nextPatch.properties = changedProperties;
+    workspaceStoreRef.current?.updatePage(id, nextPatch);
   }
 
   function updateProperty(pageId: string, propertyId: string, value: StoredPropertyValue) {
@@ -254,6 +256,11 @@ export default function App() {
     setView(resource.type);
   }
 
+  function exportActiveResource() {
+    if (!activeResource) return;
+    downloadJson(activeResource.title, resourceExport(activeResource, pages, schema));
+  }
+
   if (preview.kind === 'page') {
     const page = pages.find((item) => item.id === preview.id) ?? pages[0];
     return page ? <EmbeddedPagePreview schema={schema} page={page} /> : null;
@@ -289,6 +296,7 @@ export default function App() {
             <button className="lab-theme-toggle" type="button" title={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
               {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
             </button>
+            <button className="lab-export-button" type="button" title="Exportar recurso como JSON" onClick={exportActiveResource}><FileJson size={14} />JSON</button>
             <button onClick={() => createPage()}><Plus size={14} />Nova pagina</button>
           </div>
         </header>
@@ -362,7 +370,11 @@ export default function App() {
 
         {view === 'page' && openPage && (
           <section className="lab-page-stage">
-            <div className="lab-page-toolbar"><button onClick={() => setView(activeResource?.type ?? 'board')}>← {activeResource?.title ?? 'Workspace'}</button><span>Yjs local · sincronização entre abas</span><button title="Fechar" onClick={() => setView(activeResource?.type ?? 'board')}><X size={15} /></button></div>
+            <div className="lab-page-toolbar">
+              <button onClick={() => setView(activeResource?.type ?? 'board')}>← {activeResource?.title ?? 'Workspace'}</button>
+              <span>Salvo no Yjs local</span>
+              <div><button type="button" title="Exportar pagina como JSON" onClick={() => downloadJson(openPage.title, pageExport(openPage, schema))}><FileJson size={14} />Exportar JSON</button><button title="Fechar" onClick={() => setView(activeResource?.type ?? 'board')}><X size={15} /></button></div>
+            </div>
             <NotionPageView
               schema={schema}
               page={openPage}
@@ -373,7 +385,6 @@ export default function App() {
               onPropertyChange={(propertyId, value) => updateProperty(openPage.id, propertyId, value)}
               onContentChange={(content: SerializedEditorState) => updatePage(openPage.id, { content })}
               onSchemaChange={updateSchema}
-              collab={{ transport: 'broadcast', room: `page-${openPage.id}`, user }}
             />
           </section>
         )}

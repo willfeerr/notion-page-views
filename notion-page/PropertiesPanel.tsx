@@ -44,16 +44,6 @@ const ADDABLE_TYPES: PropertyType[] = [
   'checkbox','url','email','phone',
 ];
 
-const CHANGEABLE_TYPE_MAP: Partial<Record<PropertyType, PropertyType[]>> = {
-  text: ['number','url','email','phone'],
-  number: ['text'],
-  select: ['multi_select','text'],
-  multi_select: ['select','text'],
-  url: ['text','email'],
-  email: ['text','url'],
-  phone: ['text'],
-};
-
 function createId(prefix: string): string {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
 }
@@ -132,7 +122,7 @@ function SortablePropertyRow({
   const renameRef = useRef<HTMLInputElement>(null);
   const isRenaming = renamingId === definition.id;
   const Icon = PROPERTY_ICONS[definition.type];
-  const changeableTypes = CHANGEABLE_TYPE_MAP[definition.type] ?? [];
+  const changeableTypes = ADDABLE_TYPES.filter((type) => type !== definition.type);
 
   return (
     <div ref={setNodeRef} style={style} className="npc-property-row">
