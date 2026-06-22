@@ -6,7 +6,6 @@ import { NotionEditor, NotionPageCard, NotionPageView } from '../notion-page';
 import { PropertiesPanel } from '../notion-page/PropertiesPanel';
 import { samplePages, sampleSchema } from '../notion-page/example/sampleData';
 import type { CollabPresence, NotionPageData, NotionSchema, StoredPropertyValue } from '../notion-page/types';
-import { Doc } from 'yjs';
 import { BroadcastProvider } from '../notion-page/editor/BroadcastProvider';
 import { CalendarView } from './CalendarView';
 import { WorkspaceYjsStore } from './workspaceYjs';
@@ -15,6 +14,7 @@ import {
   buildProperty, createId, emptyValueFor, normalizeDateValue, schemaForResource,
   type BoardResource, type CalendarResource, type WorkspaceResource,
 } from './domain';
+import { ROOM_NAMES } from './yjs/model';
 
 type View = 'board' | 'calendar' | 'page';
 
@@ -97,9 +97,7 @@ export default function App() {
   }, [sidebarCollapsed]);
 
   useEffect(() => {
-    const document = new Doc();
-    const provider = new BroadcastProvider('notion-pages-workspace', document);
-    const store = new WorkspaceYjsStore(document);
+    const store = new WorkspaceYjsStore((room, document) => new BroadcastProvider(room, document));
     workspaceStoreRef.current = store;
     store.initialize(initial);
     const unsubscribe = store.subscribe((state) => {
@@ -110,8 +108,7 @@ export default function App() {
 
     return () => {
       unsubscribe();
-      provider.destroy();
-      document.destroy();
+      store.destroy();
       workspaceStoreRef.current = null;
     };
   }, [initial]);
@@ -234,6 +231,8 @@ export default function App() {
 
   function resetDemo() {
     if (!confirm('Restaurar schema e paginas de exemplo?')) return;
+    const pageIds = new Set([...pages, ...samplePages].map((page) => page.id));
+    pageIds.forEach((pageId) => localStorage.removeItem(`notion-yjs:${ROOM_NAMES.page(pageId)}`));
     localStorage.removeItem(STORAGE_KEY);
     workspaceStoreRef.current?.replaceAll({ schema: structuredClone(sampleSchema), pages: structuredClone(samplePages) });
     setOpenId(samplePages[1]?.id ?? samplePages[0]?.id ?? null);
@@ -515,7 +514,7 @@ export default function App() {
             <NotionPageView
               schema={openPageSchema}
               page={openPage}
-              collab={{ transport: 'broadcast', room: `page-${openPage.id}`, user: { ...collabUser, location: editingLocation }, onPresenceChange: setPresence }}
+              collab={{ transport: 'broadcast', room: ROOM_NAMES.page(openPage.id), user: { ...collabUser, location: editingLocation }, onPresenceChange: setPresence }}
               onTitleChange={(title) => updatePage(openPage.id, { title })}
               onIconChange={(icon) => updatePage(openPage.id, { icon })}
               onCoverChange={(coverUrl) => updatePage(openPage.id, { coverUrl })}

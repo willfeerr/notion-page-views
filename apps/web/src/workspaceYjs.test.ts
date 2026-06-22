@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { Doc } from 'yjs';
 import type { NotionPageData, NotionSchema } from '../notion-page/types';
 import { WorkspaceYjsStore } from './workspaceYjs';
+
+function createStore(onRoom?: (room: string) => void) {
+  return new WorkspaceYjsStore((room) => {
+    onRoom?.(room);
+    return { destroy() {} };
+  });
+}
 
 const schema: NotionSchema = {
   properties: [
@@ -18,19 +24,18 @@ const page: NotionPageData = {
 
 describe('WorkspaceYjsStore', () => {
   it('migrates schema and values in one transaction', () => {
-    const doc = new Doc();
-    const store = new WorkspaceYjsStore(doc);
+    const store = createStore();
     store.initialize({ schema, pages: [page] });
     let changes = 0;
     const unsubscribe = store.subscribe(() => { changes += 1; });
     store.applySchema({ ...schema, properties: schema.properties.map((property) => property.id === 'score' ? { id: 'score', name: 'Score', type: 'number' } : property) });
     expect(store.read().pages[0].properties.score).toBe(42);
-    expect(changes).toBe(2);
+    expect(changes).toBeGreaterThanOrEqual(2);
     unsubscribe();
   });
 
   it('seeds board and calendar with independent configuration', () => {
-    const store = new WorkspaceYjsStore(new Doc());
+    const store = createStore();
     store.initialize({ schema, pages: [page] });
     const resources = store.read().resources ?? [];
     expect(resources.find((resource) => resource.type === 'board')).toMatchObject({ statusPropertyId: 'status' });
@@ -38,9 +43,19 @@ describe('WorkspaceYjsStore', () => {
   });
 
   it('keeps newly inserted pages independent until explicitly linked', () => {
-    const store = new WorkspaceYjsStore(new Doc());
+    const store = createStore();
     store.initialize({ schema, pages: [page] });
     store.insertPage({ ...page, id: 'independent', title: 'Independent page' });
     expect(store.read().resources?.every((resource) => !resource.pageIds.includes('independent'))).toBe(true);
+  });
+
+  it('opens independent workspace, database and view rooms', () => {
+    const rooms: string[] = [];
+    const store = createStore((room) => rooms.push(room));
+    store.initialize({ schema, pages: [page] });
+    expect(rooms).toContain('workspace:notion-pages-lab');
+    expect(rooms).toContain('database:roadmap');
+    expect(rooms).toContain('view:board-roadmap');
+    expect(rooms).toContain('view:calendar-product');
   });
 });

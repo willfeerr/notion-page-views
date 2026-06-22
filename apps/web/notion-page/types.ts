@@ -107,6 +107,8 @@ export interface NotionPageData {
   properties: PageProperties;
   /** Serializable mirror used to bootstrap, export and index the Yjs-backed editor. */
   content: SerializedEditorState | null;
+  /** Small database projection used before the page Y.Doc is loaded. */
+  contentPreview?: string;
   createdTime: string;
   lastEditedTime: string;
 }

@@ -38,7 +38,7 @@ const INLINE_EDITABLE_TYPES = new Set(['date', 'person', 'multi_select', 'select
 
 export function NotionPageCard({ schema, page, locale, visiblePropertyIds, onClick, onDelete, onPropertyChange, onContentChange, quickActions, dragHandleProps, showWindowControls = false }: NotionPageCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const preview = getPlainTextPreview(page.content, 120);
+  const preview = page.contentPreview ?? getPlainTextPreview(page.content, 120);
   const visibleProperties = visiblePropertyIds
     ? schema.properties.filter((p) => visiblePropertyIds.includes(p.id))
     : schema.properties;
