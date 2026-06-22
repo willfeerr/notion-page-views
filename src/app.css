@@ -135,8 +135,11 @@ button { cursor: pointer; }
 .lab-calendar-event.is-last { width: calc(100% + 6px); margin-left: -6px; border-left: 0; border-radius: 0 4px 4px 0; }
 .lab-calendar-more { padding-left: 5px; color: var(--sk-muted-fg); font-size: 10px; }
 .lab-calendar-agenda { display: grid; }
-.lab-calendar-agenda > div > button { width: 100%; min-height: 62px; display: flex; align-items: center; gap: 12px; padding: 8px 16px; border: 0; border-bottom: 1px solid var(--sk-border); background: var(--sk-card); color: var(--sk-fg); text-align: left; }
-.lab-calendar-agenda > div > button:hover { background: var(--sk-muted); }
+.lab-calendar-agenda-day { min-height: 62px; display: grid; grid-template-columns: 70px minmax(0, 1fr); border-bottom: 1px solid var(--sk-border); }
+.lab-calendar-agenda-day > header { display: flex; align-items: center; justify-content: space-around; padding: 8px; border-right: 1px solid var(--sk-border); }
+.lab-calendar-agenda-day > header > button { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--sk-muted-fg); }
+.lab-calendar-agenda-day > div { display: grid; gap: 4px; padding: 6px; }
+.lab-calendar-agenda-day .lab-calendar-event-card { width: 100%; }
 .lab-calendar-agenda time { display: flex; flex-direction: column; align-items: center; color: var(--sk-muted-fg); font-size: 10px; text-transform: uppercase; }
 .lab-calendar-agenda time strong { color: var(--sk-fg); font-size: 20px; line-height: 1; }
 .lab-calendar-agenda-icon { font-size: 20px; }
@@ -188,6 +191,8 @@ button { cursor: pointer; }
 .lab-calendar-year section > div > div { position: relative; height: 24px; }
 .lab-calendar-year section button { width: 100%; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--sk-fg); font-size: 9px; }
 .lab-calendar-year section button:hover { background: var(--sk-muted); }
+.lab-calendar-year .lab-calendar-event { position: absolute; right: 2px; bottom: 1px; width: 7px; height: 7px; padding: 0; border: 0; border-radius: 50%; background: var(--sk-info); color: transparent; }
+.lab-calendar-year .lab-calendar-event > span { display: none; }
 .lab-calendar-year section div.is-outside button { color: color-mix(in oklab, var(--sk-muted-fg) 45%, transparent); }
 .lab-calendar-year section div.has-event::after { content: ''; position: absolute; left: 50%; bottom: 2px; width: 3px; height: 3px; border-radius: 50%; background: var(--sk-info); transform: translateX(-50%); }
 
@@ -197,6 +202,8 @@ button { cursor: pointer; }
 .lab-gantt-header > strong { display: flex; align-items: center; padding: 0 14px; border-right: 1px solid var(--sk-border); border-bottom: 1px solid var(--sk-border); font-size: 10px; text-transform: uppercase; }
 .lab-gantt-header > div { display: grid; grid-auto-flow: column; grid-auto-columns: 32px; }
 .lab-gantt-header > div > div { height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-right: 1px solid var(--sk-border); border-bottom: 1px solid var(--sk-border); color: var(--sk-muted-fg); font-size: 9px; }
+.lab-gantt-header button { width: 100%; height: 100%; padding: 0; border: 0; background: transparent; color: inherit; }
+.lab-gantt-header button > span { display: flex; flex-direction: column; align-items: center; }
 .lab-gantt-header small { font-size: 7px; text-transform: uppercase; }
 .lab-gantt-header .is-weekend, .lab-gantt-track .is-weekend { background: color-mix(in oklab, var(--sk-muted) 65%, transparent); }
 .lab-gantt-row > button { min-width: 0; height: 52px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 0; border-right: 1px solid var(--sk-border); border-bottom: 1px solid var(--sk-border); background: var(--sk-card); color: var(--sk-fg); text-align: left; }

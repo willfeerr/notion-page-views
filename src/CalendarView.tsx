@@ -235,8 +235,8 @@ function CreateHandle({ origin, onCreate, label, className = '', showIcon = true
   return <button ref={setNodeRef} {...attributes} {...listeners} type="button" className={`${className}${isDragging ? ' is-dragging' : ''}`} title="Clique para criar ou arraste para definir o periodo" onClick={onCreate}>{showIcon ? <Plus size={13} /> : null}{label ? <span>{label}</span> : null}</button>;
 }
 
-function EventButton({ event, onOpenPage, compact = false }: { event: PageEvent; onOpenPage: (id: string) => void; compact?: boolean }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `event:${event.id}`, data: { kind: 'event', event } satisfies DragData });
+function EventButton({ event, onOpenPage, compact = false, instance = '' }: { event: PageEvent; onOpenPage: (id: string) => void; compact?: boolean; instance?: string }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `event:${event.id}:${instance}`, data: { kind: 'event', event } satisfies DragData });
   return <button ref={setNodeRef} {...attributes} {...listeners} type="button" className={`${compact ? 'lab-calendar-event' : 'lab-calendar-event-card'}${isDragging ? ' is-dragging' : ''}`} onClick={() => onOpenPage(event.page.id)}><span>{event.page.icon || '📄'}</span><span><strong>{event.page.title}</strong>{compact ? null : <small>{displayRange(event)}</small>}</span></button>;
 }
 
@@ -252,7 +252,7 @@ function DaysView({ days, events, datePropertyId, visibleHours, onOpenPage, onCr
     {days.map((day) => {
       const iso = datePart(day);
       const allDay = events.filter((event) => event.allDay && intersects(event, iso));
-      return <section key={iso}><DropTarget value={iso} className="lab-calendar-all-day"><small>DIA INTEIRO</small>{allDay.map((event) => <EventButton key={event.id} event={event} onOpenPage={onOpenPage} />)}</DropTarget><div className="lab-calendar-hour-list">{hours.map((hour) => {
+      return <section key={iso}><DropTarget value={iso} className="lab-calendar-all-day"><small>DIA INTEIRO</small>{allDay.map((event) => <EventButton key={event.id} event={event} instance={iso} onOpenPage={onOpenPage} />)}</DropTarget><div className="lab-calendar-hour-list">{hours.map((hour) => {
         const slot = `${iso}T${`${hour}`.padStart(2, '0')}:00`;
         const slotEvents = events.filter((event) => !event.allDay && event.start.slice(0, 13) === slot.slice(0, 13));
         return <DropTarget key={slot} value={slot} className="lab-calendar-hour-slot"><CreateHandle origin={slot} onCreate={() => onCreatePage(datePropertyId, slot, `${iso}T${`${hour + 1}`.padStart(2, '0')}:00`)} />{slotEvents.map((event) => <EventButton key={event.id} event={event} onOpenPage={onOpenPage} />)}</DropTarget>;
@@ -268,27 +268,30 @@ function MonthView({ anchor, events, datePropertyId, onOpenPage, onCreatePage }:
       const iso = datePart(date);
       const dayEvents = events.filter((event) => intersects(event, iso));
       return <DropTarget key={iso} value={iso} className={`lab-calendar-day${date.getMonth() !== anchor.getMonth() ? ' is-outside' : ''}${iso === datePart(new Date()) ? ' is-today' : ''}`}><CreateHandle origin={iso} onCreate={() => onCreatePage(datePropertyId, iso)} label={date.getDate()} className="lab-calendar-day-number" showIcon={false} />
-        <div className="lab-calendar-events">{dayEvents.slice(0, 3).map((event) => <EventButton key={event.id} event={event} onOpenPage={onOpenPage} compact />)}{dayEvents.length > 3 ? <span className="lab-calendar-more">+{dayEvents.length - 3}</span> : null}</div>
+        <div className="lab-calendar-events">{dayEvents.slice(0, 3).map((event) => <EventButton key={event.id} event={event} instance={iso} onOpenPage={onOpenPage} compact />)}{dayEvents.length > 3 ? <span className="lab-calendar-more">+{dayEvents.length - 3}</span> : null}</div>
       </DropTarget>;
     })}
   </div>;
 }
 
-function YearView({ anchor, events, datePropertyId, onCreatePage }: Parameters<typeof CalendarModeView>[0]) {
+function YearView({ anchor, events, datePropertyId, onCreatePage, onOpenPage }: Parameters<typeof CalendarModeView>[0]) {
   return <div className="lab-calendar-year">{Array.from({ length: 12 }, (_, month) => {
     const monthDate = new Date(anchor.getFullYear(), month, 1);
     return <section key={month}><h3>{new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(monthDate)}</h3><div>{['D','S','T','Q','Q','S','S'].map((day, index) => <small key={`${day}-${index}`}>{day}</small>)}{monthCells(monthDate).map((date) => {
       const iso = datePart(date);
-      return <DropTarget key={iso} value={iso} className={`${date.getMonth() !== month ? 'is-outside ' : ''}${events.some((event) => intersects(event, iso)) ? 'has-event' : ''}`}><CreateHandle origin={iso} onCreate={() => onCreatePage(datePropertyId, iso)} label={date.getDate()} showIcon={false} /></DropTarget>;
+      const dayEvents = events.filter((event) => intersects(event, iso));
+      return <DropTarget key={iso} value={iso} className={`${date.getMonth() !== month ? 'is-outside ' : ''}${dayEvents.length ? 'has-event' : ''}`}><CreateHandle origin={iso} onCreate={() => onCreatePage(datePropertyId, iso)} label={date.getDate()} showIcon={false} />{dayEvents[0] ? <EventButton event={dayEvents[0]} instance={`year-${iso}`} onOpenPage={onOpenPage} compact /> : null}</DropTarget>;
     })}</div></section>;
   })}</div>;
 }
 
-function AgendaView({ anchor, events, onOpenPage }: Parameters<typeof CalendarModeView>[0]) {
-  const first = datePart(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
-  const last = datePart(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0));
-  const visible = events.filter((event) => intersects(event, first, last));
-  return <div className="lab-calendar-agenda">{visible.length ? visible.map((event) => <DropTarget key={event.id} value={event.start}><EventButton event={event} onOpenPage={onOpenPage} /></DropTarget>) : <div className="lab-calendar-empty"><CalendarDays size={26} /><strong>Nenhuma pagina agendada</strong></div>}</div>;
+function AgendaView({ anchor, events, datePropertyId, onOpenPage, onCreatePage }: Parameters<typeof CalendarModeView>[0]) {
+  const days = daysInMonth(anchor);
+  return <div className="lab-calendar-agenda">{days.map((day) => {
+    const iso = datePart(day);
+    const dayEvents = events.filter((event) => intersects(event, iso));
+    return <DropTarget key={iso} value={iso} className="lab-calendar-agenda-day"><header><time><strong>{day.getDate()}</strong>{new Intl.DateTimeFormat('pt-BR', { month: 'short' }).format(day)}</time><CreateHandle origin={iso} onCreate={() => onCreatePage(datePropertyId, iso)} /></header><div>{dayEvents.map((event) => <EventButton key={event.id} event={event} instance={`agenda-${iso}`} onOpenPage={onOpenPage} />)}</div></DropTarget>;
+  })}</div>;
 }
 
 function ResizeHandle({ event, edge }: { event: PageEvent; edge: 'start' | 'end' }) {
@@ -297,12 +300,12 @@ function ResizeHandle({ event, edge }: { event: PageEvent; edge: 'start' | 'end'
   return <span ref={setNodeRef} {...attributes} {...listeners} className={`lab-gantt-resize is-${edge}`} title={`Ajustar ${edge === 'start' ? 'inicio' : 'fim'}`} />;
 }
 
-function GanttView({ anchor, events, onOpenPage }: Parameters<typeof CalendarModeView>[0]) {
+function GanttView({ anchor, events, datePropertyId, onOpenPage, onCreatePage }: Parameters<typeof CalendarModeView>[0]) {
   const days = daysInMonth(anchor);
   const first = datePart(days[0]);
   const last = datePart(days[days.length - 1]);
   const visible = events.filter((event) => intersects(event, first, last));
-  return <div className="lab-gantt"><div className="lab-gantt-header"><strong>Pagina</strong><div>{days.map((day) => <DropTarget key={datePart(day)} value={datePart(day)} className={day.getDay() === 0 || day.getDay() === 6 ? 'is-weekend' : ''}><small>{new Intl.DateTimeFormat('pt-BR', { weekday: 'narrow' }).format(day)}</small>{day.getDate()}</DropTarget>)}</div></div>{visible.map((event) => {
+  return <div className="lab-gantt"><div className="lab-gantt-header"><strong>Pagina</strong><div>{days.map((day) => <DropTarget key={datePart(day)} value={datePart(day)} className={day.getDay() === 0 || day.getDay() === 6 ? 'is-weekend' : ''}><CreateHandle origin={datePart(day)} onCreate={() => onCreatePage(datePropertyId, datePart(day))} label={<><small>{new Intl.DateTimeFormat('pt-BR', { weekday: 'narrow' }).format(day)}</small>{day.getDate()}</>} showIcon={false} /></DropTarget>)}</div></div>{visible.map((event) => {
     const start = Math.max(0, Math.round((parseLocal(event.start).getTime() - parseLocal(first).getTime()) / 86400000));
     const end = Math.min(days.length - 1, Math.round((parseLocal(event.end).getTime() - parseLocal(first).getTime()) / 86400000));
     return <div className="lab-gantt-row" key={event.id}><button type="button" onClick={() => onOpenPage(event.page.id)}><span>{event.page.icon || '📄'}</span><span><strong>{event.page.title}</strong><small>{displayRange(event)}</small></span></button><div className="lab-gantt-track">{days.map((day) => <DropTarget key={datePart(day)} value={datePart(day)} className={day.getDay() === 0 || day.getDay() === 6 ? 'is-weekend' : ''} />)}<div className="lab-gantt-bar" style={{ left: `${start * 32 + 3}px`, width: `${Math.max(26, (end - start + 1) * 32 - 6)}px` }}><ResizeHandle event={event} edge="start" /><EventButton event={event} onOpenPage={onOpenPage} compact /><ResizeHandle event={event} edge="end" /></div></div></div>;

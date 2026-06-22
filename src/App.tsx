@@ -121,7 +121,6 @@ export default function App() {
   function updateSchema(next: NotionSchema, fallbackByPropertyId: Record<string, StoredPropertyValue> = {}) {
     if (!activeResource) return;
     const activeIds = new Set(activeResource.propertyIds);
-    const retained = schema.properties.filter((property) => !activeIds.has(property.id));
     const resourceProperties = [...next.properties];
     let primaryPatch: Partial<WorkspaceResource> = {};
     if (activeResource.type === 'board' && !resourceProperties.some((property) => property.id === activeResource.statusPropertyId && property.type === 'status')) {
@@ -134,7 +133,18 @@ export default function App() {
       resourceProperties.push(replacement);
       primaryPatch = { datePropertyId: replacement.id } as Partial<WorkspaceResource>;
     }
-    const merged = { properties: [...retained, ...resourceProperties] };
+    const nextById = new Map(resourceProperties.map((property) => [property.id, property]));
+    const referencedElsewhere = new Set(resources.filter((resource) => resource.id !== activeResource.id).flatMap((resource) => resource.propertyIds));
+    const mergedProperties = schema.properties.flatMap((property) => {
+      const changed = nextById.get(property.id);
+      if (changed) {
+        nextById.delete(property.id);
+        return [changed];
+      }
+      if (activeIds.has(property.id) && !referencedElsewhere.has(property.id)) return [];
+      return [property];
+    });
+    const merged = { properties: [...mergedProperties, ...nextById.values()] };
     workspaceStoreRef.current?.applySchema(merged, fallbackByPropertyId);
     workspaceStoreRef.current?.updateResource(activeResource.id, {
       ...primaryPatch,
@@ -248,7 +258,7 @@ export default function App() {
       ? schema.properties.find((property) => property.id === existingDatePropertyId && property.type === 'date')
       : undefined;
     const primary = existingDate ?? buildProperty(type === 'board' ? 'status' : 'date', type === 'board' ? `${title} Status` : `${title} Data`);
-    const propertyIds = [...new Set([...schema.properties.map((property) => property.id), primary.id])];
+    const propertyIds = [primary.id];
     const id = createId(type);
     const resource: WorkspaceResource = type === 'board'
       ? { id, type, title, pageIds: [], propertyIds, statusPropertyId: primary.id }
