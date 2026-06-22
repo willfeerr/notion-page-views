@@ -17,6 +17,7 @@ export class BroadcastProvider {
   private connected = false;
   private synced = false;
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
+  private persistTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(readonly name: string, readonly document: Doc) {
     this.storageKey = `notion-yjs:${name}`;
@@ -50,12 +51,20 @@ export class BroadcastProvider {
     }
   }
 
+  private schedulePersist(): void {
+    if (this.persistTimer) clearTimeout(this.persistTimer);
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
+      this.persist();
+    }, 250);
+  }
+
   private post(message: Message): void {
     this.channel?.postMessage(message);
   }
 
   private handleDocumentUpdate = (update: Uint8Array, origin: unknown): void => {
-    this.persist();
+    this.schedulePersist();
     if (origin !== this) this.post({ type: 'update', update });
   };
 
@@ -99,6 +108,9 @@ export class BroadcastProvider {
 
   disconnect(): void {
     if (!this.connected) return;
+    if (this.persistTimer) clearTimeout(this.persistTimer);
+    this.persistTimer = null;
+    this.persist();
     removeAwarenessStates(this.awareness, [this.document.clientID], 'disconnect');
     this.document.off('update', this.handleDocumentUpdate);
     this.awareness.off('update', this.handleAwarenessUpdate);

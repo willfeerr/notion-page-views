@@ -209,7 +209,10 @@ const ALL_OPTIONS: BlockOption[] = [
   }),
   new BlockOption({ title: 'Board embed', description: 'Incorporar o board do workspace', icon: Columns3, group: 'Mídia',
     keywords: ['board','kanban','embed'],
-    onSelect: (editor) => editor.dispatchCommand(INSERT_EMBED_COMMAND, { url: workspaceEmbedUrl('board', 'roadmap') }),
+    onSelect: (editor) => {
+      const id = window.prompt('ID do board:', 'board-roadmap')?.trim();
+      if (id) editor.dispatchCommand(INSERT_EMBED_COMMAND, { url: workspaceEmbedUrl('board', id) });
+    },
   }),
 
   // ── Avançado ──────────────────────────────────────────────────────

@@ -27,7 +27,11 @@ export interface MultiSelectPropertyDefinition extends PropertyDefinitionBase {
 export interface StatusPropertyDefinition extends PropertyDefinitionBase {
   type: 'status'; options: SelectOption[]; groups: StatusGroup[];
 }
-export interface DatePropertyDefinition extends PropertyDefinitionBase { type: 'date'; }
+export interface DatePropertyDefinition extends PropertyDefinitionBase {
+  type: 'date';
+  includeTime?: boolean;
+  timezone?: string;
+}
 export interface PersonPropertyDefinition extends PropertyDefinitionBase {
   type: 'person'; people: PersonOption[]; multiple?: boolean;
 }
@@ -41,6 +45,8 @@ export interface LastEditedTimePropertyDefinition extends PropertyDefinitionBase
 export interface DateRangeValue {
   start: string;
   end?: string | null;
+  allDay?: boolean;
+  timezone?: string;
 }
 
 export type PropertyDefinition =
@@ -88,10 +94,7 @@ export interface NotionPageData {
   coverPosition?: number;
   title: string;
   properties: PageProperties;
-  /**
-   * Only used in local (non-collab) mode as initial state seed.
-   * In collab mode, content lives in the Yjs doc on the Hocuspocus server.
-   */
+  /** Serializable mirror used to bootstrap, export and index the Yjs-backed editor. */
   content: SerializedEditorState | null;
   createdTime: string;
   lastEditedTime: string;

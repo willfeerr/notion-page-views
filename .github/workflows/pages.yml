@@ -2,6 +2,8 @@ name: Deploy GitHub Pages
 
 on:
   push:
+    branches: [main, 'codex/**']
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -26,6 +28,8 @@ jobs:
         run: npm install
       - name: Typecheck
         run: npm run typecheck
+      - name: Unit tests
+        run: npm run test:unit
       - name: Build
         run: npm run build
       - uses: actions/upload-pages-artifact@v4
@@ -34,6 +38,7 @@ jobs:
 
   deploy:
     needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

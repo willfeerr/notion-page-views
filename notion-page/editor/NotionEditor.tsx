@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LexicalComposer, type InitialConfigType } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
@@ -75,6 +75,7 @@ export function NotionEditor({
   showTableOfContents = false,
 }: NotionEditorProps) {
   const [containerElem, setContainerElem] = useState<HTMLDivElement | null>(null);
+  const changeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const initialConfig: InitialConfigType = {
     namespace: collab ? `collab-${collab.room}` : 'notion-page',
@@ -86,9 +87,20 @@ export function NotionEditor({
   };
 
   const handleChange = useCallback(
-    (editorState: EditorState) => { onChange?.(editorState.toJSON()); },
+    (editorState: EditorState) => {
+      if (changeTimer.current) clearTimeout(changeTimer.current);
+      const snapshot = editorState.toJSON();
+      changeTimer.current = setTimeout(() => {
+        changeTimer.current = null;
+        onChange?.(snapshot);
+      }, 200);
+    },
     [onChange],
   );
+
+  useEffect(() => () => {
+    if (changeTimer.current) clearTimeout(changeTimer.current);
+  }, []);
 
   return (
     <LexicalComposer initialConfig={initialConfig}>
@@ -139,9 +151,10 @@ export function NotionEditor({
             <>
               <HistoryPlugin />
               <SerializedStateSyncPlugin value={initialContent} />
-              {onChange && <OnChangePlugin onChange={handleChange} ignoreSelectionChange />}
             </>
           )}
+
+          {onChange && <OnChangePlugin onChange={handleChange} ignoreSelectionChange />}
 
           {showWordCount && <WordCountPlugin />}
         </div>

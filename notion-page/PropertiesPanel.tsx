@@ -74,6 +74,8 @@ function buildNewProperty(type: PropertyType, people: PersonOption[] = []): Prop
       };
     case 'person':
       return { id, name: 'Pessoa', type, people, multiple: true };
+    case 'date':
+      return { id, name: 'Data', type, includeTime: true, timezone: 'America/Sao_Paulo' };
     default:
       return { id, name: PROPERTY_TYPE_LABELS[type] ?? type, type } as PropertyDefinition;
   }

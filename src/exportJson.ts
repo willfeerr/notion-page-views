@@ -1,18 +1,19 @@
 import type { SerializedEditorState, SerializedLexicalNode } from 'lexical';
 import type { NotionPageData, NotionSchema, StoredPropertyValue } from '../notion-page/types';
-import type { WorkspaceResource } from './workspaceYjs';
+import type { WorkspaceResource } from './domain';
 
 type TextNode = SerializedLexicalNode & { children?: TextNode[]; text?: string };
 
-function plainText(content: SerializedEditorState | null): string {
+export function plainText(content: SerializedEditorState | null): string {
   if (!content) return '';
   const parts: string[] = [];
   const walk = (node: TextNode) => {
     if (typeof node.text === 'string') parts.push(node.text);
     node.children?.forEach(walk);
+    if (node.children?.length && node.type !== 'root') parts.push('\n');
   };
   walk(content.root as TextNode);
-  return parts.join(' ').replace(/\s+/g, ' ').trim();
+  return parts.join('').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function displayPropertyValue(schema: NotionSchema, propertyId: string, value: StoredPropertyValue): string {
@@ -46,11 +47,20 @@ export function pageExport(page: NotionPageData, schema: NotionSchema) {
       title: page.title,
       text,
       searchableText: [page.title, text, ...propertyText].join(' ').replace(/\s+/g, ' ').trim(),
-      properties: Object.fromEntries(schema.properties.map((definition) => [definition.name, page.properties[definition.id] ?? null])),
+      properties: Object.fromEntries(schema.properties.map((definition) => [definition.id, {
+        name: definition.name,
+        type: definition.type,
+        value: page.properties[definition.id] ?? null,
+        displayValue: displayPropertyValue(schema, definition.id, page.properties[definition.id]),
+      }])),
       createdTime: page.createdTime,
       lastEditedTime: page.lastEditedTime,
     },
   };
+}
+
+export function pageSearchText(page: NotionPageData, schema: NotionSchema): string {
+  return pageExport(page, schema).index.searchableText;
 }
 
 export function resourceExport(resource: WorkspaceResource, pages: NotionPageData[], schema: NotionSchema) {

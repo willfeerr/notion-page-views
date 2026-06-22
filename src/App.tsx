@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, FileJson, GripVertical, Moon, Plus, RotateCcw, Search, Sun, Trash2, X } from 'lucide-react';
 import type { SerializedEditorState } from 'lexical';
-import { NotionPageCard, NotionPageView } from '../notion-page';
+import { NotionEditor, NotionPageCard, NotionPageView } from '../notion-page';
 import { PropertiesPanel } from '../notion-page/PropertiesPanel';
 import { samplePages, sampleSchema } from '../notion-page/example/sampleData';
-import type { NotionPageData, NotionSchema, PropertyDefinition, StoredPropertyValue } from '../notion-page/types';
+import type { NotionPageData, NotionSchema, StoredPropertyValue } from '../notion-page/types';
 import { Doc } from 'yjs';
 import { BroadcastProvider } from '../notion-page/editor/BroadcastProvider';
 import { CalendarView } from './CalendarView';
-import { WorkspaceYjsStore, type WorkspaceResource } from './workspaceYjs';
-import { downloadJson, pageExport, resourceExport } from './exportJson';
+import { WorkspaceYjsStore } from './workspaceYjs';
+import { downloadJson, pageExport, pageSearchText, resourceExport } from './exportJson';
+import {
+  buildProperty, createId, emptyValueFor, normalizeDateValue, schemaForResource,
+  type WorkspaceResource,
+} from './domain';
 
 type View = 'board' | 'calendar' | 'page';
 
@@ -21,35 +25,6 @@ function loadState(): { schema: NotionSchema; pages: NotionPageData[]; resources
     if (stored) return JSON.parse(stored) as { schema: NotionSchema; pages: NotionPageData[]; resources?: WorkspaceResource[] };
   } catch { /* use seed */ }
   return { schema: structuredClone(sampleSchema), pages: structuredClone(samplePages) };
-}
-
-function emptyValueFor(definition: PropertyDefinition): StoredPropertyValue {
-  if (definition.type === 'checkbox') return false;
-  if (definition.type === 'multi_select' || definition.type === 'person') return [];
-  return null;
-}
-
-function normalizePropertyValue(
-  definition: PropertyDefinition,
-  previous: PropertyDefinition | undefined,
-  value: StoredPropertyValue,
-): StoredPropertyValue {
-  if (!previous || previous.type !== definition.type) return emptyValueFor(definition);
-  if (definition.type === 'select' || definition.type === 'status') {
-    return typeof value === 'string' && definition.options.some((option) => option.id === value) ? value : null;
-  }
-  if (definition.type === 'multi_select') {
-    const validIds = new Set(definition.options.map((option) => option.id));
-    return Array.isArray(value) ? value.filter((id) => validIds.has(id)) : [];
-  }
-  if (definition.type === 'person') {
-    const validIds = new Set(definition.people.map((person) => person.id));
-    const selected = Array.isArray(value) ? value.filter((id) => validIds.has(id)) : [];
-    return definition.multiple === false ? selected.slice(0, 1) : selected;
-  }
-  if (definition.type === 'checkbox') return Boolean(value);
-  if (definition.type === 'number') return typeof value === 'number' ? value : null;
-  return value;
 }
 
 export default function App() {
@@ -91,7 +66,6 @@ export default function App() {
       setSchema(state.schema);
       setPages(state.pages);
       setResources(state.resources ?? []);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     });
 
     return () => {
@@ -104,13 +78,20 @@ export default function App() {
 
   const openPage = pages.find((page) => page.id === openId) ?? pages[0] ?? null;
   const activeResource = resources.find((resource) => resource.id === activeResourceId) ?? resources[0];
-  const statusDefinition = schema.properties.find((property) => property.type === 'status');
+  const activeSchema = useMemo(() => schemaForResource(schema, activeResource), [activeResource, schema]);
+  const statusDefinition = activeResource?.type === 'board'
+    ? schema.properties.find((property) => property.id === activeResource.statusPropertyId && property.type === 'status')
+    : undefined;
   const statusOptions = statusDefinition?.type === 'status' ? statusDefinition.options : [];
   const visiblePages = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('pt-BR');
-    return normalized ? pages.filter((page) => page.title.toLocaleLowerCase('pt-BR').includes(normalized)) : pages;
-  }, [pages, query]);
-  const activePages = activeResource ? visiblePages.filter((page) => activeResource.pageIds.includes(page.id)) : visiblePages;
+    return normalized ? pages.filter((page) => pageSearchText(page, schema).toLocaleLowerCase('pt-BR').includes(normalized)) : pages;
+  }, [pages, query, schema]);
+  const activePages = useMemo(() => {
+    if (!activeResource) return visiblePages;
+    const byId = new Map(visiblePages.map((page) => [page.id, page]));
+    return activeResource.pageIds.map((id) => byId.get(id)).filter((page): page is NotionPageData => Boolean(page));
+  }, [activeResource, visiblePages]);
 
   function updatePage(id: string, patch: Partial<NotionPageData>) {
     const now = new Date().toISOString();
@@ -129,22 +110,36 @@ export default function App() {
     if (!page) return;
     workspaceStoreRef.current?.updateProperty(pageId, propertyId, value);
     const definition = schema.properties.find((property) => property.id === propertyId);
-    if (definition?.type === 'date' && value) {
-      const firstCalendar = resources.find((resource) => resource.type === 'calendar');
-      if (firstCalendar) workspaceStoreRef.current?.linkPage(firstCalendar.id, pageId);
+    if (definition?.type === 'date') {
+      resources.filter((resource) => resource.type === 'calendar' && resource.datePropertyId === propertyId).forEach((calendar) => {
+        if (value) workspaceStoreRef.current?.linkPage(calendar.id, pageId);
+        else workspaceStoreRef.current?.unlinkPage(calendar.id, pageId);
+      });
     }
   }
 
-  function updateSchema(next: NotionSchema) {
-    const previousById = new Map(schema.properties.map((property) => [property.id, property]));
-    workspaceStoreRef.current?.setSchema(next);
-    pages.forEach((page) => {
-      const properties = Object.fromEntries(next.properties.map((definition) => [
-        definition.id,
-        normalizePropertyValue(definition, previousById.get(definition.id), page.properties[definition.id]),
-      ]));
-      workspaceStoreRef.current?.updatePage(page.id, { properties });
-    });
+  function updateSchema(next: NotionSchema, fallbackByPropertyId: Record<string, StoredPropertyValue> = {}) {
+    if (!activeResource) return;
+    const activeIds = new Set(activeResource.propertyIds);
+    const retained = schema.properties.filter((property) => !activeIds.has(property.id));
+    const resourceProperties = [...next.properties];
+    let primaryPatch: Partial<WorkspaceResource> = {};
+    if (activeResource.type === 'board' && !resourceProperties.some((property) => property.id === activeResource.statusPropertyId && property.type === 'status')) {
+      const replacement = buildProperty('status', `${activeResource.title} Status`);
+      resourceProperties.push(replacement);
+      primaryPatch = { statusPropertyId: replacement.id } as Partial<WorkspaceResource>;
+    }
+    if (activeResource.type === 'calendar' && !resourceProperties.some((property) => property.id === activeResource.datePropertyId && property.type === 'date')) {
+      const replacement = buildProperty('date', `${activeResource.title} Data`);
+      resourceProperties.push(replacement);
+      primaryPatch = { datePropertyId: replacement.id } as Partial<WorkspaceResource>;
+    }
+    const merged = { properties: [...retained, ...resourceProperties] };
+    workspaceStoreRef.current?.applySchema(merged, fallbackByPropertyId);
+    workspaceStoreRef.current?.updateResource(activeResource.id, {
+      ...primaryPatch,
+      propertyIds: resourceProperties.map((property) => property.id),
+    } as Partial<WorkspaceResource>);
   }
 
   function createPage(statusId?: string, afterPageId?: string) {
@@ -159,7 +154,7 @@ export default function App() {
       content: null, createdTime: now, lastEditedTime: now,
     };
     workspaceStoreRef.current?.insertPage(page, afterPageId);
-    if (activeResource?.type === 'board') workspaceStoreRef.current?.linkPage(activeResource.id, page.id);
+    if (activeResource) workspaceStoreRef.current?.linkPage(activeResource.id, page.id, afterPageId);
     setOpenId(page.id);
     setView('page');
   }
@@ -171,6 +166,7 @@ export default function App() {
 
   function resetDemo() {
     if (!confirm('Restaurar schema e paginas de exemplo?')) return;
+    localStorage.removeItem(STORAGE_KEY);
     workspaceStoreRef.current?.replaceAll({ schema: structuredClone(sampleSchema), pages: structuredClone(samplePages) });
     setOpenId(samplePages[1]?.id ?? samplePages[0]?.id ?? null);
     setView('board');
@@ -182,8 +178,8 @@ export default function App() {
     const option = { id, name: 'Nova lane', color: 'default' as const };
     const firstGroup = statusDefinition.groups[0];
     updateSchema({
-      ...schema,
-      properties: schema.properties.map((property) => property.id === statusDefinition.id ? {
+      ...activeSchema,
+      properties: activeSchema.properties.map((property) => property.id === statusDefinition.id ? {
         ...statusDefinition,
         options: [...statusDefinition.options, option],
         groups: firstGroup
@@ -196,7 +192,7 @@ export default function App() {
 
   function renameLane(id: string, name: string) {
     if (!statusDefinition || statusDefinition.type !== 'status' || !name.trim()) return;
-    updateSchema({ ...schema, properties: schema.properties.map((property) => property.id === statusDefinition.id
+    updateSchema({ ...activeSchema, properties: activeSchema.properties.map((property) => property.id === statusDefinition.id
       ? { ...statusDefinition, options: statusDefinition.options.map((option) => option.id === id ? { ...option, name: name.trim() } : option) }
       : property) });
   }
@@ -206,13 +202,11 @@ export default function App() {
     const lane = statusDefinition.options.find((option) => option.id === id);
     if (!confirm(`Excluir a lane "${lane?.name ?? ''}"? Os cards serao movidos para a primeira lane.`)) return;
     const fallback = statusDefinition.options.find((option) => option.id !== id)!;
-    updateSchema({ ...schema, properties: schema.properties.map((property) => property.id === statusDefinition.id ? {
+    updateSchema({ ...activeSchema, properties: activeSchema.properties.map((property) => property.id === statusDefinition.id ? {
       ...statusDefinition,
       options: statusDefinition.options.filter((option) => option.id !== id),
       groups: statusDefinition.groups.map((group) => ({ ...group, optionIds: group.optionIds.filter((optionId) => optionId !== id) })),
-    } : property) });
-    pages.filter((page) => page.properties[statusDefinition.id] === id)
-      .forEach((page) => updateProperty(page.id, statusDefinition.id, fallback.id));
+    } : property) }, { [statusDefinition.id]: fallback.id });
   }
 
   function reorderLane(overId: string) {
@@ -223,7 +217,7 @@ export default function App() {
     if (from < 0 || to < 0) return;
     const [moved] = options.splice(from, 1);
     options.splice(to, 0, moved);
-    updateSchema({ ...schema, properties: schema.properties.map((property) => property.id === statusDefinition.id ? { ...statusDefinition, options } : property) });
+    updateSchema({ ...activeSchema, properties: activeSchema.properties.map((property) => property.id === statusDefinition.id ? { ...statusDefinition, options } : property) });
     setDraggingLaneId(null);
   }
 
@@ -231,7 +225,7 @@ export default function App() {
     const statusId = statusOptions[0]?.id;
     const now = new Date().toISOString();
     const properties = Object.fromEntries(schema.properties.map((definition) => [definition.id, emptyValueFor(definition)]));
-    properties[datePropertyId] = end && end !== start ? { start, end } : start;
+    properties[datePropertyId] = normalizeDateValue({ start, end: end ?? start, allDay: start.length <= 10 }, activeResource?.type === 'calendar' ? activeResource.timezone : undefined);
     if (statusDefinition && statusId) properties[statusDefinition.id] = statusId;
     for (const definition of schema.properties) {
       if (definition.type === 'created_time' || definition.type === 'last_edited_time') properties[definition.id] = now;
@@ -244,12 +238,22 @@ export default function App() {
   }
 
   function moveCalendarEvent(pageId: string, datePropertyId: string, start: string, end: string) {
-    updateProperty(pageId, datePropertyId, start === end ? start : { start, end });
+    const current = pages.find((page) => page.id === pageId)?.properties[datePropertyId];
+    const normalized = normalizeDateValue(current, activeResource?.type === 'calendar' ? activeResource.timezone : undefined);
+    updateProperty(pageId, datePropertyId, { ...normalized, start, end, allDay: start.length <= 10 });
   }
 
-  function createResource(type: WorkspaceResource['type'], title: string) {
-    const resource: WorkspaceResource = { id: `${type}-${crypto.randomUUID()}`, type, title, pageIds: [] };
-    workspaceStoreRef.current?.createResource(resource);
+  function createResource(type: WorkspaceResource['type'], title: string, existingDatePropertyId?: string) {
+    const existingDate = type === 'calendar' && existingDatePropertyId
+      ? schema.properties.find((property) => property.id === existingDatePropertyId && property.type === 'date')
+      : undefined;
+    const primary = existingDate ?? buildProperty(type === 'board' ? 'status' : 'date', type === 'board' ? `${title} Status` : `${title} Data`);
+    const propertyIds = [...new Set([...schema.properties.map((property) => property.id), primary.id])];
+    const id = createId(type);
+    const resource: WorkspaceResource = type === 'board'
+      ? { id, type, title, pageIds: [], propertyIds, statusPropertyId: primary.id }
+      : { id, type, title, pageIds: [], propertyIds, datePropertyId: primary.id, timezone: 'America/Sao_Paulo', defaultView: 'month', visibleHours: { from: 7, to: 21 } };
+    workspaceStoreRef.current?.createResource(resource, existingDate ? [] : [primary]);
     setActiveResourceId(resource.id);
     setView(type);
     setCreatingType(null);
@@ -258,6 +262,29 @@ export default function App() {
   function openResource(resource: WorkspaceResource) {
     setActiveResourceId(resource.id);
     setView(resource.type);
+  }
+
+  function renameResource(resource: WorkspaceResource) {
+    const title = prompt('Novo nome do recurso', resource.title)?.trim();
+    if (title) workspaceStoreRef.current?.updateResource(resource.id, { title } as Partial<WorkspaceResource>);
+  }
+
+  function deleteResource(resource: WorkspaceResource) {
+    if (!confirm(`Excluir "${resource.title}"? As paginas serao mantidas.`)) return;
+    workspaceStoreRef.current?.deleteResource(resource.id);
+    const next = resources.find((candidate) => candidate.id !== resource.id);
+    if (next) {
+      setActiveResourceId(next.id);
+      setView(next.type);
+    }
+  }
+
+  function deleteOpenPage() {
+    if (!openPage || !confirm(`Excluir a pagina "${openPage.title}"?`)) return;
+    workspaceStoreRef.current?.deletePage(openPage.id);
+    const next = pages.find((page) => page.id !== openPage.id);
+    setOpenId(next?.id ?? null);
+    setView(activeResource?.type ?? 'board');
   }
 
   function exportActiveResource() {
@@ -271,7 +298,15 @@ export default function App() {
   }
 
   if (preview.kind === 'board') {
-    return <EmbeddedBoardPreview schema={schema} pages={visiblePages} />;
+    const resource = resources.find((item) => item.type === 'board' && item.id === preview.id)
+      ?? resources.find((item) => item.type === 'board');
+    return resource ? <EmbeddedBoardPreview resource={resource} schema={schemaForResource(schema, resource)} pages={pages.filter((page) => resource.pageIds.includes(page.id))} /> : null;
+  }
+
+  if (preview.kind === 'calendar') {
+    const resource = resources.find((item) => item.type === 'calendar' && item.id === preview.id)
+      ?? resources.find((item) => item.type === 'calendar');
+    return resource ? <CalendarView title={resource.title} schema={schemaForResource(schema, resource)} pages={pages.filter((page) => resource.pageIds.includes(page.id))} datePropertyId={resource.datePropertyId} timezone={resource.timezone} defaultView={resource.defaultView} visibleHours={resource.visibleHours} onOpenPage={() => undefined} onCreatePage={() => undefined} onMoveEvent={() => undefined} /> : null;
   }
 
   return (
@@ -280,9 +315,11 @@ export default function App() {
         <div className="lab-brand"><span>N</span><strong>Notion Pages Lab</strong></div>
         <div className="lab-sidebar-label"><span>APPS</span><button type="button" title="Novo board" onClick={() => setCreatingType('board')}><Plus size={13} /></button></div>
         {resources.map((resource) => (
-          <button key={resource.id} className={view === resource.type && activeResource?.id === resource.id ? 'is-active' : ''} onClick={() => openResource(resource)}>
-            {resource.type === 'calendar' ? <CalendarDays size={14} /> : <span className="lab-nav-symbol">▦</span>}{resource.title}
-          </button>
+          <div key={resource.id} className={`lab-resource-row${view === resource.type && activeResource?.id === resource.id ? ' is-active' : ''}`}>
+            <button type="button" onClick={() => openResource(resource)} onDoubleClick={() => renameResource(resource)}>{resource.type === 'calendar' ? <CalendarDays size={14} /> : <span className="lab-nav-symbol">▦</span>}<span>{resource.title}</span></button>
+            <button type="button" title="Renomear" onClick={() => renameResource(resource)}>✎</button>
+            <button type="button" title="Excluir" onClick={() => deleteResource(resource)}><Trash2 size={12} /></button>
+          </div>
         ))}
         <div className="lab-sidebar-create">
           <button type="button" onClick={() => setCreatingType('board')}><Plus size={13} />Board</button>
@@ -341,9 +378,15 @@ export default function App() {
                     </header>
                     <div className="lab-card-list">
                       {columnPages.map((page) => (
-                        <div key={page.id} className="lab-card-slot">
+                        <div key={page.id} className="lab-card-slot" onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
+                          event.stopPropagation();
+                          if (!draggingId || !activeResource || draggingId === page.id) return;
+                          movePage(draggingId, status.id);
+                          workspaceStoreRef.current?.reorderResourcePage(activeResource.id, draggingId, page.id);
+                          setDraggingId(null);
+                        }}>
                           <div draggable onDragStart={() => setDraggingId(page.id)} onDragEnd={() => setDraggingId(null)} className={draggingId === page.id ? 'is-dragging' : ''}>
-                            <NotionPageCard schema={schema} page={page} visiblePropertyIds={['priority', 'tags', 'assignee', 'due']} onClick={() => { setOpenId(page.id); setView('page'); }} />
+                          <NotionPageCard schema={activeSchema} page={page} visiblePropertyIds={activeSchema.properties.filter((property) => property.id !== statusDefinition?.id).slice(0, 4).map((property) => property.id)} onClick={() => { setOpenId(page.id); setView('page'); }} />
                           </div>
                           <div className="lab-insert-row">
                             <span />
@@ -365,8 +408,13 @@ export default function App() {
         {view === 'calendar' && (
           <CalendarView
             title={activeResource?.type === 'calendar' ? activeResource.title : 'Calendario'}
-            schema={schema}
+            schema={activeSchema}
             pages={activePages}
+            datePropertyId={activeResource?.type === 'calendar' ? activeResource.datePropertyId : ''}
+            timezone={activeResource?.type === 'calendar' ? activeResource.timezone : 'America/Sao_Paulo'}
+            defaultView={activeResource?.type === 'calendar' ? activeResource.defaultView : 'month'}
+            visibleHours={activeResource?.type === 'calendar' ? activeResource.visibleHours : { from: 7, to: 21 }}
+            onViewChange={(defaultView) => activeResource?.type === 'calendar' && workspaceStoreRef.current?.updateResource(activeResource.id, { defaultView } as Partial<WorkspaceResource>)}
             onOpenPage={(pageId) => { setOpenId(pageId); setView('page'); }}
             onCreatePage={createCalendarPage}
             onMoveEvent={moveCalendarEvent}
@@ -378,11 +426,12 @@ export default function App() {
             <div className="lab-page-toolbar">
               <button onClick={() => setView(activeResource?.type ?? 'board')}>← {activeResource?.title ?? 'Workspace'}</button>
               <span>Salvo no Yjs local</span>
-              <div><button type="button" title="Exportar pagina como JSON" onClick={() => downloadJson(openPage.title, pageExport(openPage, schema))}><FileJson size={14} />Exportar JSON</button><button title="Fechar" onClick={() => setView(activeResource?.type ?? 'board')}><X size={15} /></button></div>
+              <div><button type="button" title="Exportar pagina como JSON" onClick={() => downloadJson(openPage.title, pageExport(openPage, schema))}><FileJson size={14} />Exportar JSON</button><button type="button" title="Excluir pagina" onClick={deleteOpenPage}><Trash2 size={14} /></button><button title="Fechar" onClick={() => setView(activeResource?.type ?? 'board')}><X size={15} /></button></div>
             </div>
             <NotionPageView
-              schema={schema}
+              schema={activeSchema}
               page={openPage}
+              collab={{ transport: 'broadcast', room: `page-${openPage.id}`, user: { id: 'local-user', name: 'Voce', color: '#2383e2' } }}
               onTitleChange={(title) => updatePage(openPage.id, { title })}
               onIconChange={(icon) => updatePage(openPage.id, { icon })}
               onCoverChange={(coverUrl) => updatePage(openPage.id, { coverUrl })}
@@ -394,14 +443,16 @@ export default function App() {
           </section>
         )}
       </main>
-      {creatingType ? <CreateResourceDialog type={creatingType} onClose={() => setCreatingType(null)} onCreate={createResource} /> : null}
+      {creatingType ? <CreateResourceDialog type={creatingType} schema={schema} onClose={() => setCreatingType(null)} onCreate={createResource} /> : null}
     </div>
   );
 }
 
-function CreateResourceDialog({ type, onClose, onCreate }: { type: WorkspaceResource['type']; onClose: () => void; onCreate: (type: WorkspaceResource['type'], title: string) => void }) {
+function CreateResourceDialog({ type, schema, onClose, onCreate }: { type: WorkspaceResource['type']; schema: NotionSchema; onClose: () => void; onCreate: (type: WorkspaceResource['type'], title: string, existingDatePropertyId?: string) => void }) {
   const [title, setTitle] = useState(type === 'board' ? 'Novo board' : 'Novo calendario');
-  return <div className="lab-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><form className="lab-dialog" onSubmit={(event) => { event.preventDefault(); if (title.trim()) onCreate(type, title.trim()); }}><header><span>{type === 'board' ? '▦' : '▣'}</span><div><strong>Novo {type === 'board' ? 'Board' : 'Calendario'}</strong><small>Crie uma entidade independente no workspace.</small></div></header><label>Titulo<input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label><footer><button type="button" onClick={onClose}>Cancelar</button><button type="submit">Criar</button></footer></form></div>;
+  const [datePropertyId, setDatePropertyId] = useState('new');
+  const dates = schema.properties.filter((property) => property.type === 'date');
+  return <div className="lab-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><form className="lab-dialog" onSubmit={(event) => { event.preventDefault(); if (title.trim()) onCreate(type, title.trim(), datePropertyId === 'new' ? undefined : datePropertyId); }}><header><span>{type === 'board' ? '▦' : '▣'}</span><div><strong>Novo {type === 'board' ? 'Board' : 'Calendario'}</strong><small>Crie uma entidade independente no workspace.</small></div></header><label>Titulo<input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label>{type === 'calendar' ? <label>Propriedade de data<select value={datePropertyId} onChange={(event) => setDatePropertyId(event.target.value)}><option value="new">Criar nova propriedade</option>{dates.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}</select></label> : null}<footer><button type="button" onClick={onClose}>Cancelar</button><button type="submit">Criar</button></footer></form></div>;
 }
 
 function EmbeddedPagePreview({ schema, page }: { schema: NotionSchema; page: NotionPageData }) {
@@ -413,17 +464,19 @@ function EmbeddedPagePreview({ schema, page }: { schema: NotionSchema; page: Not
         <p>PAGE</p>
         <h1>{page.title || 'Sem titulo'}</h1>
         <PropertiesPanel schema={schema} properties={page.properties} />
+        <div className="npc-page-divider" />
+        <NotionEditor initialContent={page.content} editable={false} />
       </section>
     </main>
   );
 }
 
-function EmbeddedBoardPreview({ schema, pages }: { schema: NotionSchema; pages: NotionPageData[] }) {
-  const status = schema.properties.find((property) => property.type === 'status');
+function EmbeddedBoardPreview({ resource, schema, pages }: { resource: Extract<WorkspaceResource, { type: 'board' }>; schema: NotionSchema; pages: NotionPageData[] }) {
+  const status = schema.properties.find((property) => property.id === resource.statusPropertyId && property.type === 'status');
   const options = status?.type === 'status' ? status.options : [];
   return (
     <main className="lab-embed-preview lab-embed-board-preview">
-      <header><p>BOARD</p><h1>Roadmap de produto</h1></header>
+      <header><p>BOARD</p><h1>{resource.title}</h1></header>
       <div className="lab-embed-board">
         {options.map((option) => (
           <section key={option.id}>

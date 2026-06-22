@@ -4,11 +4,11 @@
  * Hocuspocus collaboration plugin for Lexical.
  *
  * Wraps CollaborationPlugin from @lexical/react, wiring HocuspocusProvider
- * as the Yjs provider. In collab mode: HistoryPlugin and OnChangePlugin
- * must NOT be mounted — Yjs handles both undo history and persistence.
+ * as the Yjs provider. Yjs owns editing history; a separate OnChange listener
+ * may mirror debounced JSON snapshots for indexing and export.
  */
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { CollaborationPlugin } from '@lexical/react/LexicalCollaborationPlugin';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import type { Provider } from '@lexical/yjs';
@@ -24,6 +24,17 @@ interface CollabPluginProps extends CollabConfig {
 export function CollabPlugin({ transport = 'broadcast', wsUrl, room, user, initialContent }: CollabPluginProps) {
   const providerRef = useRef<Provider | null>(null);
 
+  const providerFactory = useCallback((id: string, yjsDocMap: Map<string, Doc>) => {
+    if (providerRef.current) return providerRef.current;
+    const doc = new Doc();
+    yjsDocMap.set(id, doc);
+    const provider = transport === 'broadcast'
+      ? new BroadcastProvider(id, doc)
+      : new HocuspocusProvider({ url: wsUrl ?? '', name: id, document: doc });
+    providerRef.current = provider as unknown as Provider;
+    return providerRef.current;
+  }, [transport, wsUrl]);
+
   useEffect(() => () => {
     const provider = providerRef.current as Provider & { destroy?: () => void };
     provider?.destroy?.();
@@ -33,17 +44,7 @@ export function CollabPlugin({ transport = 'broadcast', wsUrl, room, user, initi
   return (
     <CollaborationPlugin
       id={room}
-      providerFactory={(id, yjsDocMap) => {
-        if (providerRef.current) return providerRef.current;
-        const doc = new Doc();
-        yjsDocMap.set(id, doc);
-        const provider = transport === 'broadcast'
-          ? new BroadcastProvider(id, doc)
-          : new HocuspocusProvider({ url: wsUrl ?? '', name: id, document: doc });
-        // HocuspocusProvider is structurally compatible with the Lexical Provider interface
-        providerRef.current = provider as unknown as Provider;
-        return providerRef.current;
-      }}
+      providerFactory={providerFactory}
       shouldBootstrap
       initialEditorState={initialContent ? JSON.stringify(initialContent) : null}
       username={user.name}

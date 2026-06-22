@@ -1067,6 +1067,7 @@
 }
 .npc-embed-workspace-frame { display: block; width: 100%; height: 390px; border: 0; background: #fafafa; }
 .npc-date-range-field { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.npc-date-all-day { display: inline-flex; align-items: center; gap: 5px; color: var(--npc-text-secondary); font-size: 11px; }
 .npc-date-range-field .npc-date-input { width: 148px; }
 .npc-date-range-separator { color: var(--npc-text-secondary); font-size: 12px; }
 .npc-date-range-add, .npc-date-range-clear { border: 0; border-radius: 5px; background: transparent; color: var(--npc-text-secondary); font-size: 12px; }

@@ -41,6 +41,7 @@ export function PropertyField({
         onChange={(v) => onChange?.(v)} />;
     case 'date':
       return <DateField value={value as string | DateRangeValue | null | undefined} compact={compact} locale={locale}
+        includeTime={definition.includeTime} timezone={definition.timezone}
         onChange={(v) => onChange?.(v)} />;
     case 'select':
       return <SelectField variant="select" options={definition.options}

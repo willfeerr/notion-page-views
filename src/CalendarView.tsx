@@ -1,14 +1,26 @@
-import { useMemo, useState, type CSSProperties, type ComponentType, type DragEvent } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ComponentType, type ReactNode } from 'react';
+import {
+  DndContext, DragOverlay, KeyboardSensor, PointerSensor, TouchSensor,
+  useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent,
+} from '@dnd-kit/core';
 import {
   CalendarDays, CalendarRange, ChevronLeft, ChevronRight, Columns3,
   GanttChartSquare, Grid2X2, Grid3X3, List, Plus, Rows3,
 } from 'lucide-react';
-import type { DateRangeValue, NotionPageData, NotionSchema, StoredPropertyValue } from '../notion-page/types';
+import type { DateRangeValue, NotionPageData, NotionSchema } from '../notion-page/types';
+import { normalizeDateValue } from './domain';
+
+type CalendarMode = 'day' | 'workweek' | 'week' | 'month' | 'year' | 'agenda' | 'gantt';
 
 interface CalendarViewProps {
   title: string;
   schema: NotionSchema;
   pages: NotionPageData[];
+  datePropertyId: string;
+  timezone: string;
+  defaultView: CalendarMode;
+  visibleHours: { from: number; to: number };
+  onViewChange?: (mode: CalendarMode) => void;
   onOpenPage: (pageId: string) => void;
   onCreatePage: (datePropertyId: string, start: string, end?: string) => void;
   onMoveEvent: (pageId: string, datePropertyId: string, start: string, end: string) => void;
@@ -17,23 +29,16 @@ interface CalendarViewProps {
 interface PageEvent {
   id: string;
   page: NotionPageData;
-  propertyName: string;
-  propertyId: string;
   start: string;
   end: string;
+  allDay: boolean;
+  timezone: string;
 }
 
-type CalendarMode = 'day' | 'workweek' | 'week' | 'month' | 'year' | 'agenda' | 'gantt';
-
-interface CalendarDnd {
-  draggingEvent: PageEvent | null;
-  createStart: string | null;
-  startEvent: (event: DragEvent<HTMLElement>, item: PageEvent) => void;
-  startCreate: (event: DragEvent<HTMLElement>, start: string) => void;
-  allowDrop: (event: DragEvent<HTMLElement>) => void;
-  dropOnDate: (event: DragEvent<HTMLElement>, date: string) => void;
-  finish: () => void;
-}
+type DragData =
+  | { kind: 'event'; event: PageEvent }
+  | { kind: 'create'; origin: string }
+  | { kind: 'resize-start' | 'resize-end'; event: PageEvent };
 
 const VIEW_ITEMS: Array<{ mode: CalendarMode; label: string; shortLabel: string; icon: ComponentType<{ size?: number }> }> = [
   { mode: 'day', label: 'Dia', shortLabel: 'Dia', icon: List },
@@ -52,30 +57,25 @@ function datePart(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function parseDate(value: string): Date {
-  return new Date(`${value.slice(0, 10)}T00:00:00`);
+function parseLocal(value: string): Date {
+  return new Date(value.length <= 10 ? `${value}T00:00:00` : value);
+}
+
+function localIso(date: Date, allDay: boolean): string {
+  if (allDay) return datePart(date);
+  return `${datePart(date)}T${`${date.getHours()}`.padStart(2, '0')}:${`${date.getMinutes()}`.padStart(2, '0')}`;
 }
 
 function addDays(date: Date, count: number): Date {
   const next = new Date(date);
-  next.setDate(date.getDate() + count);
+  next.setDate(next.getDate() + count);
   return next;
 }
 
 function startOfWeek(date: Date, monday = false): Date {
   const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const day = start.getDay();
-  start.setDate(start.getDate() - (monday ? (day + 6) % 7 : day));
+  start.setDate(start.getDate() - (monday ? (start.getDay() + 6) % 7 : start.getDay()));
   return start;
-}
-
-function readRange(value: StoredPropertyValue): { start: string; end: string } | null {
-  if (typeof value === 'string' && value) return { start: value.slice(0, 10), end: value.slice(0, 10) };
-  if (value && typeof value === 'object' && !Array.isArray(value) && 'start' in value) {
-    const range = value as DateRangeValue;
-    if (range.start) return { start: range.start.slice(0, 10), end: (range.end || range.start).slice(0, 10) };
-  }
-  return null;
 }
 
 function monthCells(anchor: Date): Date[] {
@@ -85,12 +85,20 @@ function monthCells(anchor: Date): Date[] {
 }
 
 function daysInMonth(anchor: Date): Date[] {
-  const count = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate();
-  return Array.from({ length: count }, (_, index) => new Date(anchor.getFullYear(), anchor.getMonth(), index + 1));
+  return Array.from({ length: new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate() }, (_, index) => new Date(anchor.getFullYear(), anchor.getMonth(), index + 1));
 }
 
 function intersects(event: PageEvent, start: string, end = start): boolean {
-  return event.start <= end && event.end >= start;
+  return event.start.slice(0, 10) <= end.slice(0, 10) && event.end.slice(0, 10) >= start.slice(0, 10);
+}
+
+function displayRange(event: PageEvent): string {
+  const formatter = new Intl.DateTimeFormat('pt-BR', event.allDay
+    ? { day: '2-digit', month: '2-digit', year: 'numeric' }
+    : { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const start = formatter.format(parseLocal(event.start));
+  const end = formatter.format(parseLocal(event.end));
+  return start === end ? start : `${start} - ${end}`;
 }
 
 function anchorLabel(anchor: Date, mode: CalendarMode): string {
@@ -100,60 +108,67 @@ function anchorLabel(anchor: Date, mode: CalendarMode): string {
     const end = addDays(start, mode === 'workweek' ? 4 : 6);
     return `${start.getDate()} ${new Intl.DateTimeFormat('pt-BR', { month: 'short' }).format(start)} - ${end.getDate()} ${new Intl.DateTimeFormat('pt-BR', { month: 'short', year: 'numeric' }).format(end)}`;
   }
-  if (mode === 'year') return `${anchor.getFullYear()}`;
+  if (mode === 'year') return String(anchor.getFullYear());
   return new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(anchor);
 }
 
-export function CalendarView({ title, schema, pages, onOpenPage, onCreatePage, onMoveEvent }: CalendarViewProps) {
+export function CalendarView(props: CalendarViewProps) {
+  const {
+    title, schema, pages, datePropertyId, timezone, defaultView, visibleHours,
+    onViewChange, onOpenPage, onCreatePage, onMoveEvent,
+  } = props;
   const [anchor, setAnchor] = useState(() => new Date());
-  const [mode, setMode] = useState<CalendarMode>('month');
-  const [draggingEvent, setDraggingEvent] = useState<PageEvent | null>(null);
-  const [createStart, setCreateStart] = useState<string | null>(null);
-  const dateProperties = schema.properties.filter((property) => property.type === 'date');
-  const primaryDate = dateProperties[0];
-  const events = useMemo(() => pages.flatMap((page) => dateProperties.flatMap((property): PageEvent[] => {
-    const range = readRange(page.properties[property.id]);
-    return range ? [{ id: `${page.id}:${property.id}`, page, propertyName: property.name, propertyId: property.id, ...range }] : [];
-  })).sort((a, b) => a.start.localeCompare(b.start)), [dateProperties, pages]);
+  const [mode, setMode] = useState<CalendarMode>(defaultView);
+  const [activeDrag, setActiveDrag] = useState<DragData | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 6 } }),
+    useSensor(KeyboardSensor),
+  );
+  const dateProperty = schema.properties.find((property) => property.id === datePropertyId && property.type === 'date');
+  const events = useMemo(() => pages.flatMap((page): PageEvent[] => {
+    const value = normalizeDateValue(page.properties[datePropertyId], timezone);
+    if (!value) return [];
+    return [{
+      id: `${page.id}:${datePropertyId}`, page, start: value.start,
+      end: value.end || value.start, allDay: value.allDay ?? value.start.length <= 10,
+      timezone: value.timezone || timezone,
+    }];
+  }).sort((a, b) => a.start.localeCompare(b.start)), [datePropertyId, pages, timezone]);
 
-  const dnd: CalendarDnd = {
-    draggingEvent,
-    createStart,
-    startEvent(event, item) {
-      event.stopPropagation();
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/calendar-event', item.id);
-      setCreateStart(null);
-      setDraggingEvent(item);
-    },
-    startCreate(event, start) {
-      event.stopPropagation();
-      event.dataTransfer.effectAllowed = 'copy';
-      event.dataTransfer.setData('text/calendar-create', start || 'drop');
-      setDraggingEvent(null);
-      setCreateStart(start);
-    },
-    allowDrop(event) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = draggingEvent ? 'move' : 'copy';
-      event.currentTarget.classList.add('is-dnd-over');
-    },
-    dropOnDate(event, date) {
-      event.preventDefault();
-      event.stopPropagation();
-      event.currentTarget.classList.remove('is-dnd-over');
-      if (draggingEvent) {
-        const duration = Math.max(0, Math.round((parseDate(draggingEvent.end).getTime() - parseDate(draggingEvent.start).getTime()) / 86400000));
-        onMoveEvent(draggingEvent.page.id, draggingEvent.propertyId, date, datePart(addDays(parseDate(date), duration)));
-      } else if (createStart !== null && primaryDate) {
-        const start = createStart || date;
-        onCreatePage(primaryDate.id, start <= date ? start : date, start <= date ? date : start);
-      }
-      setDraggingEvent(null);
-      setCreateStart(null);
-    },
-    finish() { setDraggingEvent(null); setCreateStart(null); },
-  };
+  useEffect(() => setMode(defaultView), [defaultView]);
+
+  function selectMode(next: CalendarMode) {
+    setMode(next);
+    onViewChange?.(next);
+  }
+
+  function handleDragEnd({ active, over }: DragEndEvent) {
+    const data = active.data.current as DragData | undefined;
+    const target = over?.data.current?.value as string | undefined;
+    setActiveDrag(null);
+    if (!data || !target) return;
+    if (data.kind === 'create') {
+      const start = data.origin <= target ? data.origin : target;
+      const end = data.origin <= target ? target : data.origin;
+      onCreatePage(datePropertyId, start, end);
+      return;
+    }
+    const event = data.event;
+    if (data.kind === 'resize-start') {
+      if (target <= event.end) onMoveEvent(event.page.id, datePropertyId, target, event.end);
+      return;
+    }
+    if (data.kind === 'resize-end') {
+      if (target >= event.start) onMoveEvent(event.page.id, datePropertyId, event.start, target);
+      return;
+    }
+    const duration = Math.max(0, parseLocal(event.end).getTime() - parseLocal(event.start).getTime());
+    let nextStart = target;
+    if (target.length <= 10 && !event.allDay) nextStart = `${target}T${event.start.slice(11, 16)}`;
+    const nextEnd = localIso(new Date(parseLocal(nextStart).getTime() + duration), event.allDay);
+    onMoveEvent(event.page.id, datePropertyId, nextStart, nextEnd);
+  }
 
   function navigate(offset: number) {
     setAnchor((current) => {
@@ -164,118 +179,132 @@ export function CalendarView({ title, schema, pages, onOpenPage, onCreatePage, o
     });
   }
 
+  const shared = { events, datePropertyId, onOpenPage, onCreatePage, visibleHours };
   return (
-    <section className="lab-calendar-view">
-      <div className="lab-heading lab-calendar-heading">
-        <div><span>CALENDAR</span><h1>{title}</h1></div>
-        {primaryDate ? <button draggable title="Clique ou arraste para uma data" onDragStart={(event) => dnd.startCreate(event, '')} onDragEnd={dnd.finish} onClick={() => onCreatePage(primaryDate.id, datePart(new Date()))}><Plus size={15} />Novo evento</button> : null}
-      </div>
-      <div className="lab-calendar-shell">
-        <header className="lab-calendar-toolbar">
-          <div className="lab-calendar-navigation">
-            <button type="button" onClick={() => setAnchor(new Date())}>Hoje</button>
-            <button type="button" className="is-icon" title="Anterior" onClick={() => navigate(-1)}><ChevronLeft size={16} /></button>
-            <button type="button" className="is-icon" title="Proximo" onClick={() => navigate(1)}><ChevronRight size={16} /></button>
-            <strong>{anchorLabel(anchor, mode)}</strong>
-          </div>
-          <div className="lab-calendar-modes">
-            {VIEW_ITEMS.map((item) => {
-              const Icon = item.icon;
-              return <button key={item.mode} type="button" title={item.label} className={mode === item.mode ? 'is-active' : ''} onClick={() => setMode(item.mode)}><Icon size={14} /><span>{item.shortLabel}</span></button>;
-            })}
-          </div>
-        </header>
-
-        {!primaryDate ? (
-          <div className="lab-calendar-empty"><CalendarDays size={26} /><strong>Adicione uma property de data</strong><span>Paginas com data ou periodo aparecem aqui automaticamente.</span></div>
-        ) : (
-          <CalendarModeView mode={mode} anchor={anchor} events={events} datePropertyId={primaryDate.id} onOpenPage={onOpenPage} onCreatePage={onCreatePage} dnd={dnd} />
-        )}
-      </div>
-    </section>
+    <DndContext sensors={sensors} onDragStart={(event) => setActiveDrag(event.active.data.current as DragData)} onDragCancel={() => setActiveDrag(null)} onDragEnd={handleDragEnd}>
+      <section className="lab-calendar-view">
+        <div className="lab-heading lab-calendar-heading">
+          <div><span>CALENDAR</span><h1>{title}</h1><small>{timezone}</small></div>
+          {dateProperty ? <CreateHandle origin={`${datePart(new Date())}T09:00`} onCreate={() => onCreatePage(datePropertyId, `${datePart(new Date())}T09:00`, `${datePart(new Date())}T10:00`)} label="Novo evento" /> : null}
+        </div>
+        <div className="lab-calendar-shell">
+          <header className="lab-calendar-toolbar">
+            <div className="lab-calendar-navigation">
+              <button type="button" onClick={() => setAnchor(new Date())}>Hoje</button>
+              <button type="button" className="is-icon" title="Anterior" onClick={() => navigate(-1)}><ChevronLeft size={16} /></button>
+              <button type="button" className="is-icon" title="Proximo" onClick={() => navigate(1)}><ChevronRight size={16} /></button>
+              <strong>{anchorLabel(anchor, mode)}</strong>
+            </div>
+            <div className="lab-calendar-modes">
+              {VIEW_ITEMS.map((item) => {
+                const Icon = item.icon;
+                return <button key={item.mode} type="button" title={item.label} className={mode === item.mode ? 'is-active' : ''} onClick={() => selectMode(item.mode)}><Icon size={14} /><span>{item.shortLabel}</span></button>;
+              })}
+            </div>
+          </header>
+          {!dateProperty ? <div className="lab-calendar-empty"><CalendarDays size={26} /><strong>Propriedade de data indisponivel</strong></div>
+            : <CalendarModeView mode={mode} anchor={anchor} {...shared} />}
+        </div>
+      </section>
+      <DragOverlay>{activeDrag?.kind === 'event' ? <div className="lab-calendar-drag-overlay">{activeDrag.event.page.icon || '📄'} {activeDrag.event.page.title}</div> : activeDrag ? <div className="lab-calendar-drag-overlay"><Plus size={14} />Criar periodo</div> : null}</DragOverlay>
+    </DndContext>
   );
 }
 
 function CalendarModeView(props: {
-  mode: CalendarMode; anchor: Date; events: PageEvent[]; datePropertyId: string;
-  onOpenPage: (id: string) => void; onCreatePage: (propertyId: string, start: string, end?: string) => void; dnd: CalendarDnd;
+  mode: CalendarMode; anchor: Date; events: PageEvent[]; datePropertyId: string; visibleHours: { from: number; to: number };
+  onOpenPage: (id: string) => void; onCreatePage: (propertyId: string, start: string, end?: string) => void;
 }) {
-  const { mode, anchor, events, datePropertyId, onOpenPage, onCreatePage, dnd } = props;
-  if (mode === 'month') return <MonthView anchor={anchor} events={events} datePropertyId={datePropertyId} onOpenPage={onOpenPage} onCreatePage={onCreatePage} dnd={dnd} />;
-  if (mode === 'year') return <YearView anchor={anchor} events={events} datePropertyId={datePropertyId} onCreatePage={onCreatePage} dnd={dnd} />;
-  if (mode === 'agenda') return <AgendaView anchor={anchor} events={events} onOpenPage={onOpenPage} dnd={dnd} />;
-  if (mode === 'gantt') return <GanttView anchor={anchor} events={events} onOpenPage={onOpenPage} dnd={dnd} />;
+  const { mode, anchor } = props;
+  if (mode === 'month') return <MonthView {...props} />;
+  if (mode === 'year') return <YearView {...props} />;
+  if (mode === 'agenda') return <AgendaView {...props} />;
+  if (mode === 'gantt') return <GanttView {...props} />;
   const start = mode === 'day' ? anchor : startOfWeek(anchor, mode === 'workweek');
   const count = mode === 'day' ? 1 : mode === 'workweek' ? 5 : 7;
-  return <DaysView days={Array.from({ length: count }, (_, index) => addDays(start, index))} events={events} datePropertyId={datePropertyId} onOpenPage={onOpenPage} onCreatePage={onCreatePage} dnd={dnd} />;
+  return <DaysView {...props} days={Array.from({ length: count }, (_, index) => addDays(start, index))} />;
 }
 
-function EventButton({ event, onOpenPage, dnd }: { event: PageEvent; onOpenPage: (id: string) => void; dnd: CalendarDnd }) {
-  return <button draggable type="button" className={`lab-calendar-event-card${dnd.draggingEvent?.id === event.id ? ' is-dragging' : ''}`} onDragStart={(dragEvent) => dnd.startEvent(dragEvent, event)} onDragEnd={dnd.finish} onClick={() => onOpenPage(event.page.id)}><span>{event.page.icon || '📄'}</span><span><strong>{event.page.title}</strong><small>{event.start === event.end ? event.start : `${event.start} - ${event.end}`}</small></span></button>;
+function DropTarget({ value, className = '', children }: { value: string; className?: string; children?: ReactNode }) {
+  const { isOver, setNodeRef } = useDroppable({ id: `drop:${value}`, data: { value } });
+  return <div ref={setNodeRef} className={`${className}${isOver ? ' is-dnd-over' : ''}`}>{children}</div>;
 }
 
-function DaysView({ days, events, datePropertyId, onOpenPage, onCreatePage, dnd }: {
-  days: Date[]; events: PageEvent[]; datePropertyId: string; onOpenPage: (id: string) => void; onCreatePage: (propertyId: string, start: string, end?: string) => void; dnd: CalendarDnd;
+function CreateHandle({ origin, onCreate, label, className = '', showIcon = true }: { origin: string; onCreate: () => void; label?: ReactNode; className?: string; showIcon?: boolean }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `create:${origin}`, data: { kind: 'create', origin } satisfies DragData });
+  return <button ref={setNodeRef} {...attributes} {...listeners} type="button" className={`${className}${isDragging ? ' is-dragging' : ''}`} title="Clique para criar ou arraste para definir o periodo" onClick={onCreate}>{showIcon ? <Plus size={13} /> : null}{label ? <span>{label}</span> : null}</button>;
+}
+
+function EventButton({ event, onOpenPage, compact = false }: { event: PageEvent; onOpenPage: (id: string) => void; compact?: boolean }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `event:${event.id}`, data: { kind: 'event', event } satisfies DragData });
+  return <button ref={setNodeRef} {...attributes} {...listeners} type="button" className={`${compact ? 'lab-calendar-event' : 'lab-calendar-event-card'}${isDragging ? ' is-dragging' : ''}`} onClick={() => onOpenPage(event.page.id)}><span>{event.page.icon || '📄'}</span><span><strong>{event.page.title}</strong>{compact ? null : <small>{displayRange(event)}</small>}</span></button>;
+}
+
+function DaysView({ days, events, datePropertyId, visibleHours, onOpenPage, onCreatePage }: {
+  days: Date[]; events: PageEvent[]; datePropertyId: string; visibleHours: { from: number; to: number };
+  onOpenPage: (id: string) => void; onCreatePage: (propertyId: string, start: string, end?: string) => void;
 }) {
-  return (
-    <div className="lab-calendar-days-view" style={{ '--day-count': days.length } as CSSProperties}>
-      <div className="lab-calendar-time-gutter" />
-      {days.map((day) => <header key={datePart(day)} onDragOver={dnd.allowDrop} onDragLeave={(event) => event.currentTarget.classList.remove('is-dnd-over')} onDrop={(event) => dnd.dropOnDate(event, datePart(day))}><span>{new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(day)}</span><strong>{day.getDate()}</strong><button draggable type="button" title="Clique para criar; arraste ate outra data para criar periodo" onDragStart={(event) => dnd.startCreate(event, datePart(day))} onDragEnd={dnd.finish} onClick={() => onCreatePage(datePropertyId, datePart(day))}><Plus size={13} /></button></header>)}
-      <aside>{Array.from({ length: 12 }, (_, index) => <span key={index}>{`${index + 7}`.padStart(2, '0')}:00</span>)}</aside>
-      {days.map((day) => {
-        const iso = datePart(day);
-        const dayEvents = events.filter((event) => intersects(event, iso));
-        return <section key={iso} onDragOver={dnd.allowDrop} onDragLeave={(event) => event.currentTarget.classList.remove('is-dnd-over')} onDrop={(event) => dnd.dropOnDate(event, iso)}><div className="lab-calendar-all-day"><small>DIA INTEIRO</small>{dayEvents.map((event) => <EventButton key={event.id} event={event} onOpenPage={onOpenPage} dnd={dnd} />)}</div></section>;
-      })}
-    </div>
-  );
-}
-
-function MonthView({ anchor, events, datePropertyId, onOpenPage, onCreatePage, dnd }: {
-  anchor: Date; events: PageEvent[]; datePropertyId: string; onOpenPage: (id: string) => void; onCreatePage: (propertyId: string, start: string, end?: string) => void; dnd: CalendarDnd;
-}) {
-  const cells = monthCells(anchor);
-  return <div className="lab-calendar-grid">
-    {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map((day) => <div key={day} className="lab-calendar-weekday">{day}</div>)}
-    {cells.map((date) => {
-      const iso = datePart(date);
-      const dayEvents = events.filter((event) => intersects(event, iso));
-      return <div key={iso} onDragOver={dnd.allowDrop} onDragLeave={(event) => event.currentTarget.classList.remove('is-dnd-over')} onDrop={(event) => dnd.dropOnDate(event, iso)} className={`lab-calendar-day${date.getMonth() !== anchor.getMonth() ? ' is-outside' : ''}${iso === datePart(new Date()) ? ' is-today' : ''}`}>
-        <button draggable className="lab-calendar-day-number" type="button" title="Clique para criar; arraste ate outra data para criar periodo" onDragStart={(event) => dnd.startCreate(event, iso)} onDragEnd={dnd.finish} onClick={() => onCreatePage(datePropertyId, iso)}>{date.getDate()}</button>
-        <div className="lab-calendar-events">{dayEvents.slice(0, 3).map((event) => {
-          const position = event.start === event.end ? 'single' : iso === event.start ? 'first' : iso === event.end ? 'last' : 'middle';
-          return <button draggable key={event.id} type="button" className={`lab-calendar-event is-${position}${dnd.draggingEvent?.id === event.id ? ' is-dragging' : ''}`} onDragStart={(dragEvent) => dnd.startEvent(dragEvent, event)} onDragEnd={dnd.finish} onClick={() => onOpenPage(event.page.id)}>{position === 'middle' || position === 'last' ? null : <><span>{event.page.icon || '📄'}</span>{event.page.title}</>}</button>;
-        })}{dayEvents.length > 3 ? <span className="lab-calendar-more">+{dayEvents.length - 3}</span> : null}</div>
-      </div>;
+  const hours = Array.from({ length: Math.max(1, visibleHours.to - visibleHours.from) }, (_, index) => visibleHours.from + index);
+  return <div className="lab-calendar-days-view lab-calendar-timed" style={{ '--day-count': days.length } as CSSProperties}>
+    <div className="lab-calendar-time-gutter" />
+    {days.map((day) => <header key={datePart(day)}><span>{new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(day)}</span><strong>{day.getDate()}</strong><CreateHandle origin={datePart(day)} onCreate={() => onCreatePage(datePropertyId, datePart(day))} /></header>)}
+    <aside>{hours.map((hour) => <span key={hour}>{`${hour}`.padStart(2, '0')}:00</span>)}</aside>
+    {days.map((day) => {
+      const iso = datePart(day);
+      const allDay = events.filter((event) => event.allDay && intersects(event, iso));
+      return <section key={iso}><DropTarget value={iso} className="lab-calendar-all-day"><small>DIA INTEIRO</small>{allDay.map((event) => <EventButton key={event.id} event={event} onOpenPage={onOpenPage} />)}</DropTarget><div className="lab-calendar-hour-list">{hours.map((hour) => {
+        const slot = `${iso}T${`${hour}`.padStart(2, '0')}:00`;
+        const slotEvents = events.filter((event) => !event.allDay && event.start.slice(0, 13) === slot.slice(0, 13));
+        return <DropTarget key={slot} value={slot} className="lab-calendar-hour-slot"><CreateHandle origin={slot} onCreate={() => onCreatePage(datePropertyId, slot, `${iso}T${`${hour + 1}`.padStart(2, '0')}:00`)} />{slotEvents.map((event) => <EventButton key={event.id} event={event} onOpenPage={onOpenPage} />)}</DropTarget>;
+      })}</div></section>;
     })}
   </div>;
 }
 
-function YearView({ anchor, events, datePropertyId, onCreatePage, dnd }: { anchor: Date; events: PageEvent[]; datePropertyId: string; onCreatePage: (propertyId: string, start: string, end?: string) => void; dnd: CalendarDnd }) {
+function MonthView({ anchor, events, datePropertyId, onOpenPage, onCreatePage }: Parameters<typeof CalendarModeView>[0]) {
+  return <div className="lab-calendar-grid">
+    {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map((day) => <div key={day} className="lab-calendar-weekday">{day}</div>)}
+    {monthCells(anchor).map((date) => {
+      const iso = datePart(date);
+      const dayEvents = events.filter((event) => intersects(event, iso));
+      return <DropTarget key={iso} value={iso} className={`lab-calendar-day${date.getMonth() !== anchor.getMonth() ? ' is-outside' : ''}${iso === datePart(new Date()) ? ' is-today' : ''}`}><CreateHandle origin={iso} onCreate={() => onCreatePage(datePropertyId, iso)} label={date.getDate()} className="lab-calendar-day-number" showIcon={false} />
+        <div className="lab-calendar-events">{dayEvents.slice(0, 3).map((event) => <EventButton key={event.id} event={event} onOpenPage={onOpenPage} compact />)}{dayEvents.length > 3 ? <span className="lab-calendar-more">+{dayEvents.length - 3}</span> : null}</div>
+      </DropTarget>;
+    })}
+  </div>;
+}
+
+function YearView({ anchor, events, datePropertyId, onCreatePage }: Parameters<typeof CalendarModeView>[0]) {
   return <div className="lab-calendar-year">{Array.from({ length: 12 }, (_, month) => {
     const monthDate = new Date(anchor.getFullYear(), month, 1);
     return <section key={month}><h3>{new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(monthDate)}</h3><div>{['D','S','T','Q','Q','S','S'].map((day, index) => <small key={`${day}-${index}`}>{day}</small>)}{monthCells(monthDate).map((date) => {
-      const iso = datePart(date); const dayEvents = events.filter((event) => intersects(event, iso));
-      return <button key={iso} draggable type="button" className={`${date.getMonth() !== month ? 'is-outside ' : ''}${dayEvents.length ? 'has-event' : ''}`} onDragStart={(event) => dayEvents[0] ? dnd.startEvent(event, dayEvents[0]) : dnd.startCreate(event, iso)} onDragEnd={dnd.finish} onDragOver={dnd.allowDrop} onDragLeave={(event) => event.currentTarget.classList.remove('is-dnd-over')} onDrop={(event) => dnd.dropOnDate(event, iso)} onClick={() => onCreatePage(datePropertyId, iso)} title={dayEvents.length ? `Arrastar: ${dayEvents[0].page.title}` : 'Arraste para criar periodo'}>{date.getDate()}</button>;
+      const iso = datePart(date);
+      return <DropTarget key={iso} value={iso} className={`${date.getMonth() !== month ? 'is-outside ' : ''}${events.some((event) => intersects(event, iso)) ? 'has-event' : ''}`}><CreateHandle origin={iso} onCreate={() => onCreatePage(datePropertyId, iso)} label={date.getDate()} showIcon={false} /></DropTarget>;
     })}</div></section>;
   })}</div>;
 }
 
-function AgendaView({ anchor, events, onOpenPage, dnd }: { anchor: Date; events: PageEvent[]; onOpenPage: (id: string) => void; dnd: CalendarDnd }) {
-  const monthStart = datePart(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
-  const monthEnd = datePart(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0));
-  const visible = events.filter((event) => intersects(event, monthStart, monthEnd));
-  return <div className="lab-calendar-agenda">{visible.length ? visible.map((event) => <button draggable key={event.id} type="button" className={dnd.draggingEvent?.id === event.id ? 'is-dragging' : ''} onDragStart={(dragEvent) => dnd.startEvent(dragEvent, event)} onDragEnd={dnd.finish} onDragOver={dnd.allowDrop} onDragLeave={(dragEvent) => dragEvent.currentTarget.classList.remove('is-dnd-over')} onDrop={(dragEvent) => dnd.dropOnDate(dragEvent, event.start)} onClick={() => onOpenPage(event.page.id)}><time><strong>{parseDate(event.start).getDate()}</strong>{new Intl.DateTimeFormat('pt-BR', { month: 'short' }).format(parseDate(event.start))}</time><span className="lab-calendar-agenda-icon">{event.page.icon || '📄'}</span><span><strong>{event.page.title}</strong><small>{event.propertyName} · {event.start === event.end ? event.start : `${event.start} ate ${event.end}`}</small></span></button>) : <div className="lab-calendar-empty"><CalendarDays size={26} /><strong>Nenhuma pagina agendada</strong></div>}</div>;
+function AgendaView({ anchor, events, onOpenPage }: Parameters<typeof CalendarModeView>[0]) {
+  const first = datePart(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
+  const last = datePart(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0));
+  const visible = events.filter((event) => intersects(event, first, last));
+  return <div className="lab-calendar-agenda">{visible.length ? visible.map((event) => <DropTarget key={event.id} value={event.start}><EventButton event={event} onOpenPage={onOpenPage} /></DropTarget>) : <div className="lab-calendar-empty"><CalendarDays size={26} /><strong>Nenhuma pagina agendada</strong></div>}</div>;
 }
 
-function GanttView({ anchor, events, onOpenPage, dnd }: { anchor: Date; events: PageEvent[]; onOpenPage: (id: string) => void; dnd: CalendarDnd }) {
+function ResizeHandle({ event, edge }: { event: PageEvent; edge: 'start' | 'end' }) {
+  const kind = edge === 'start' ? 'resize-start' : 'resize-end';
+  const { attributes, listeners, setNodeRef } = useDraggable({ id: `${kind}:${event.id}`, data: { kind, event } satisfies DragData });
+  return <span ref={setNodeRef} {...attributes} {...listeners} className={`lab-gantt-resize is-${edge}`} title={`Ajustar ${edge === 'start' ? 'inicio' : 'fim'}`} />;
+}
+
+function GanttView({ anchor, events, onOpenPage }: Parameters<typeof CalendarModeView>[0]) {
   const days = daysInMonth(anchor);
   const first = datePart(days[0]);
   const last = datePart(days[days.length - 1]);
   const visible = events.filter((event) => intersects(event, first, last));
-  return <div className="lab-gantt"><div className="lab-gantt-header"><strong>Pagina</strong><div>{days.map((day) => <span draggable key={datePart(day)} onDragStart={(event) => dnd.startCreate(event, datePart(day))} onDragEnd={dnd.finish} onDragOver={dnd.allowDrop} onDragLeave={(event) => event.currentTarget.classList.remove('is-dnd-over')} onDrop={(event) => dnd.dropOnDate(event, datePart(day))} className={day.getDay() === 0 || day.getDay() === 6 ? 'is-weekend' : ''}><small>{new Intl.DateTimeFormat('pt-BR', { weekday: 'narrow' }).format(day)}</small>{day.getDate()}</span>)}</div></div>{visible.map((event) => {
-    const start = Math.max(0, Math.round((parseDate(event.start).getTime() - parseDate(first).getTime()) / 86400000));
-    const end = Math.min(days.length - 1, Math.round((parseDate(event.end).getTime() - parseDate(first).getTime()) / 86400000));
-    return <div className="lab-gantt-row" key={event.id}><button type="button" onClick={() => onOpenPage(event.page.id)}><span>{event.page.icon || '📄'}</span><span><strong>{event.page.title}</strong><small>{event.propertyName}</small></span></button><div className="lab-gantt-track">{days.map((day) => <i key={datePart(day)} onDragOver={dnd.allowDrop} onDragLeave={(dragEvent) => dragEvent.currentTarget.classList.remove('is-dnd-over')} onDrop={(dragEvent) => dnd.dropOnDate(dragEvent, datePart(day))} className={day.getDay() === 0 || day.getDay() === 6 ? 'is-weekend' : ''} />)}<button draggable type="button" className={`lab-gantt-bar${dnd.draggingEvent?.id === event.id ? ' is-dragging' : ''}`} style={{ left: `${start * 32 + 3}px`, width: `${Math.max(26, (end - start + 1) * 32 - 6)}px` }} onDragStart={(dragEvent) => dnd.startEvent(dragEvent, event)} onDragEnd={dnd.finish} onClick={() => onOpenPage(event.page.id)} title={`${event.start} - ${event.end}`}>{event.page.title}</button></div></div>;
+  return <div className="lab-gantt"><div className="lab-gantt-header"><strong>Pagina</strong><div>{days.map((day) => <DropTarget key={datePart(day)} value={datePart(day)} className={day.getDay() === 0 || day.getDay() === 6 ? 'is-weekend' : ''}><small>{new Intl.DateTimeFormat('pt-BR', { weekday: 'narrow' }).format(day)}</small>{day.getDate()}</DropTarget>)}</div></div>{visible.map((event) => {
+    const start = Math.max(0, Math.round((parseLocal(event.start).getTime() - parseLocal(first).getTime()) / 86400000));
+    const end = Math.min(days.length - 1, Math.round((parseLocal(event.end).getTime() - parseLocal(first).getTime()) / 86400000));
+    return <div className="lab-gantt-row" key={event.id}><button type="button" onClick={() => onOpenPage(event.page.id)}><span>{event.page.icon || '📄'}</span><span><strong>{event.page.title}</strong><small>{displayRange(event)}</small></span></button><div className="lab-gantt-track">{days.map((day) => <DropTarget key={datePart(day)} value={datePart(day)} className={day.getDay() === 0 || day.getDay() === 6 ? 'is-weekend' : ''} />)}<div className="lab-gantt-bar" style={{ left: `${start * 32 + 3}px`, width: `${Math.max(26, (end - start + 1) * 32 - 6)}px` }}><ResizeHandle event={event} edge="start" /><EventButton event={event} onOpenPage={onOpenPage} compact /><ResizeHandle event={event} edge="end" /></div></div></div>;
   })}{!visible.length ? <div className="lab-calendar-empty"><GanttChartSquare size={26} /><strong>Nenhuma pagina no periodo</strong></div> : null}</div>;
 }
