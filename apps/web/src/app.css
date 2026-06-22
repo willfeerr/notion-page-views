@@ -267,26 +267,11 @@ button { cursor: pointer; }
 .lab-dialog footer button[type='submit'] { border-color: var(--sk-primary); background: var(--sk-primary); color: var(--sk-primary-fg); }
 
 @media (max-width: 760px) {
-  .lab-shell, .lab-shell.is-sidebar-collapsed { --lab-sidebar-width: 100%; grid-template-columns: 1fr; }
-  .lab-shell.is-board { grid-template-rows: auto minmax(0, 1fr); }
-  .lab-shell.is-board .lab-main { min-height: 0; }
-  .lab-sidebar { position: static; width: 100%; height: auto; flex-direction: row; align-items: center; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--sk-border); }
-  .lab-brand { padding: 3px 8px; margin-right: auto; }
-  .lab-brand strong { display: none; }
-  .lab-sidebar-toggle { display: none; }
-  .is-sidebar-collapsed .lab-brand-mark { display: grid; }
-  .lab-sidebar > button { width: auto; }
-  .lab-sidebar-label, .lab-sidebar-create { display: none; }
-  .lab-resource-row { min-width: 150px; grid-template-columns: minmax(0, 1fr); }
-  .is-sidebar-collapsed .lab-resource-row { grid-template-columns: minmax(0, 1fr); }
-  .is-sidebar-collapsed .lab-resource-row button:first-child { justify-content: flex-start; padding: 0 8px; }
-  .is-sidebar-collapsed .lab-resource-row button:first-child span:last-child,
-  .is-sidebar-collapsed .lab-page-list > button > span:last-child { display: block; }
-  .is-sidebar-collapsed .lab-page-list > button { grid-template-columns: 20px minmax(0, 1fr); padding: 0 7px; }
-  .lab-resource-row button:not(:first-child) { display: none; }
-  .lab-page-list { max-width: 55vw; max-height: none; display: flex; overflow: visible; }
-  .lab-page-list > button { width: 150px; min-width: 150px; }
-  .lab-sidebar-foot { display: none; }
+  .lab-shell, .lab-shell.is-sidebar-collapsed { --lab-sidebar-width: 56px; grid-template-columns: var(--lab-sidebar-width) minmax(0, 1fr); }
+  .lab-sidebar { position: sticky; width: 56px; height: 100dvh; flex-direction: column; align-items: stretch; overflow: hidden; border-right: 1px solid var(--sk-border); border-bottom: 0; }
+  .lab-shell:not(.is-sidebar-collapsed) .lab-sidebar { position: fixed; z-index: 100; width: min(240px, calc(100vw - 40px)); box-shadow: 12px 0 36px rgb(0 0 0 / 22%); }
+  .lab-shell:not(.is-sidebar-collapsed) .lab-brand strong { display: block; }
+  .lab-shell:not(.is-sidebar-collapsed) .lab-page-list { max-height: min(38vh, 340px); }
   .lab-top-actions > span { display: none; }
   .lab-column, .lab-add-lane { min-width: 240px; }
   .lab-calendar-view { padding: 24px 12px; }

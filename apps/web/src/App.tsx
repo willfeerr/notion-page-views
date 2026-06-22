@@ -51,7 +51,10 @@ export default function App() {
   const [collabUser, setCollabUser] = useState(loadCollabUser);
   const [presence, setPresence] = useState<CollabPresence[]>([]);
   const [editingLocation, setEditingLocation] = useState('Corpo do documento');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('skrbe-sidebar-collapsed') === 'true');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    const stored = localStorage.getItem('skrbe-sidebar-collapsed');
+    return stored === null ? window.matchMedia('(max-width: 760px)').matches : stored === 'true';
+  });
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const stored = localStorage.getItem('skrbe-theme');
     if (stored === 'light' || stored === 'dark') return stored;
