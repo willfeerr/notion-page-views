@@ -153,6 +153,25 @@ button { cursor: pointer; }
 .lab-calendar-event-card strong, .lab-calendar-event-card small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lab-calendar-event-card strong { font-size: 10px; }
 .lab-calendar-event-card small { color: var(--sk-muted-fg); font-size: 8px; }
+.lab-calendar-event-card.is-dragging,
+.lab-calendar-event.is-dragging,
+.lab-calendar-agenda > button.is-dragging,
+.lab-gantt-bar.is-dragging { opacity: .35; }
+.lab-calendar-day.is-dnd-over,
+.lab-calendar-days-view > header.is-dnd-over,
+.lab-calendar-days-view > section.is-dnd-over,
+.lab-calendar-year section button.is-dnd-over,
+.lab-calendar-agenda > button.is-dnd-over,
+.lab-gantt-header span.is-dnd-over,
+.lab-gantt-track i.is-dnd-over { background: color-mix(in oklab, #3b82f6 18%, var(--sk-card)); box-shadow: inset 0 0 0 1px #3b82f6; }
+.lab-calendar-event[draggable='true'],
+.lab-calendar-event-card[draggable='true'],
+.lab-calendar-agenda > button[draggable='true'],
+.lab-gantt-bar[draggable='true'] { cursor: grab; }
+.lab-calendar-event[draggable='true']:active,
+.lab-calendar-event-card[draggable='true']:active,
+.lab-calendar-agenda > button[draggable='true']:active,
+.lab-gantt-bar[draggable='true']:active { cursor: grabbing; }
 
 .lab-calendar-year { display: grid; grid-template-columns: repeat(4, minmax(190px, 1fr)); gap: 1px; background: var(--sk-border); }
 .lab-calendar-year > section { min-width: 190px; padding: 14px; background: var(--sk-card); }

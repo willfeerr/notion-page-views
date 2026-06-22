@@ -227,11 +227,11 @@ export default function App() {
     setDraggingLaneId(null);
   }
 
-  function createCalendarPage(datePropertyId: string, date: string) {
+  function createCalendarPage(datePropertyId: string, start: string, end?: string) {
     const statusId = statusOptions[0]?.id;
     const now = new Date().toISOString();
     const properties = Object.fromEntries(schema.properties.map((definition) => [definition.id, emptyValueFor(definition)]));
-    properties[datePropertyId] = date;
+    properties[datePropertyId] = end && end !== start ? { start, end } : start;
     if (statusDefinition && statusId) properties[statusDefinition.id] = statusId;
     for (const definition of schema.properties) {
       if (definition.type === 'created_time' || definition.type === 'last_edited_time') properties[definition.id] = now;
@@ -241,6 +241,10 @@ export default function App() {
     if (activeResource?.type === 'calendar') workspaceStoreRef.current?.linkPage(activeResource.id, page.id);
     setOpenId(page.id);
     setView('page');
+  }
+
+  function moveCalendarEvent(pageId: string, datePropertyId: string, start: string, end: string) {
+    updateProperty(pageId, datePropertyId, start === end ? start : { start, end });
   }
 
   function createResource(type: WorkspaceResource['type'], title: string) {
@@ -365,6 +369,7 @@ export default function App() {
             pages={activePages}
             onOpenPage={(pageId) => { setOpenId(pageId); setView('page'); }}
             onCreatePage={createCalendarPage}
+            onMoveEvent={moveCalendarEvent}
           />
         )}
 
