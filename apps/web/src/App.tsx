@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, FileJson, FileText, GripVertical, Moon, Plus, RotateCcw, Search, Sun, Trash2, X } from 'lucide-react';
+import { CalendarDays, FileJson, FileText, GripVertical, Moon, PanelLeftClose, PanelLeftOpen, Plus, RotateCcw, Search, Sun, Trash2, X } from 'lucide-react';
 import type { SerializedEditorState } from 'lexical';
 import { NotionEditor, NotionPageCard, NotionPageView } from '../notion-page';
 import { PropertiesPanel } from '../notion-page/PropertiesPanel';
@@ -51,6 +51,7 @@ export default function App() {
   const [collabUser, setCollabUser] = useState(loadCollabUser);
   const [presence, setPresence] = useState<CollabPresence[]>([]);
   const [editingLocation, setEditingLocation] = useState('Corpo do documento');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('skrbe-sidebar-collapsed') === 'true');
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const stored = localStorage.getItem('skrbe-theme');
     if (stored === 'light' || stored === 'dark') return stored;
@@ -66,6 +67,10 @@ export default function App() {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     localStorage.setItem('skrbe-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem('skrbe-sidebar-collapsed', String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
 
   useEffect(() => {
     const document = new Doc();
@@ -345,30 +350,36 @@ export default function App() {
   }
 
   return (
-    <div className={`lab-shell is-${view}`}>
+    <div className={`lab-shell is-${view}${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`}>
       <aside className="lab-sidebar">
-        <div className="lab-brand"><span>N</span><strong>Notion Pages Lab</strong></div>
+        <div className="lab-brand">
+          <span className="lab-brand-mark">S</span>
+          <strong>SKRBE Workspace</strong>
+          <button type="button" className="lab-sidebar-toggle" title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'} aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'} onClick={() => setSidebarCollapsed((current) => !current)}>
+            {sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+          </button>
+        </div>
         <div className="lab-sidebar-label"><span>APPS</span><button type="button" title="Novo board" onClick={() => setCreatingType('board')}><Plus size={13} /></button></div>
         {resources.map((resource) => (
           <div key={resource.id} className={`lab-resource-row${view === resource.type && activeResource?.id === resource.id ? ' is-active' : ''}`}>
-            <button type="button" onClick={() => openResource(resource)} onDoubleClick={() => renameResource(resource)}>{resource.type === 'calendar' ? <CalendarDays size={14} /> : <span className="lab-nav-symbol">▦</span>}<span>{resource.title}</span></button>
+            <button type="button" title={resource.title} onClick={() => openResource(resource)} onDoubleClick={() => renameResource(resource)}>{resource.type === 'calendar' ? <CalendarDays size={14} /> : <span className="lab-nav-symbol">▦</span>}<span>{resource.title}</span></button>
             <button type="button" title="Renomear" onClick={() => renameResource(resource)}>✎</button>
             <button type="button" title="Excluir" onClick={() => deleteResource(resource)}><Trash2 size={12} /></button>
           </div>
         ))}
         <div className="lab-sidebar-create">
-          <button type="button" onClick={() => setCreatingType('board')}><Plus size={13} />Board</button>
-          <button type="button" onClick={() => setCreatingType('calendar')}><Plus size={13} />Calendario</button>
+          <button type="button" title="Novo board" onClick={() => setCreatingType('board')}><Plus size={13} /><span>Board</span></button>
+          <button type="button" title="Novo calendario" onClick={() => setCreatingType('calendar')}><Plus size={13} /><span>Calendario</span></button>
         </div>
         <div className="lab-sidebar-label"><span>PAGINAS</span><button type="button" title="Nova pagina independente" onClick={() => createPage()}><Plus size={13} /></button></div>
         <div className="lab-page-list">
           {pages.map((page) => (
-            <button key={page.id} type="button" className={view === 'page' && openPage?.id === page.id ? 'is-active' : ''} onClick={() => { setOpenId(page.id); setView('page'); }}>
+            <button key={page.id} type="button" title={page.title || 'Sem titulo'} className={view === 'page' && openPage?.id === page.id ? 'is-active' : ''} onClick={() => { setOpenId(page.id); setView('page'); }}>
               <span>{page.icon || <FileText size={13} />}</span><span>{page.title || 'Sem titulo'}</span>
             </button>
           ))}
         </div>
-        <div className="lab-sidebar-foot"><button onClick={resetDemo}><RotateCcw size={14} />Restaurar demo</button></div>
+        <div className="lab-sidebar-foot"><button title="Restaurar demo" onClick={resetDemo}><RotateCcw size={14} /><span>Restaurar demo</span></button></div>
       </aside>
 
       <main className="lab-main">

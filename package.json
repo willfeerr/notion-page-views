@@ -1,45 +1,23 @@
 {
-  "name": "notion-page-views",
-  "version": "2.0.0",
+  "name": "notion-page-views-monorepo",
+  "version": "0.0.1",
   "private": true,
-  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && npm run test:unit && npm run build",
-    "test:unit": "vitest run"
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "dev:web": "turbo dev --filter=web",
+    "typecheck": "turbo typecheck",
+    "test:unit": "turbo test:unit",
+    "test": "turbo test"
   },
-  "dependencies": {
-    "@dnd-kit/core": "latest",
-    "@dnd-kit/sortable": "latest",
-    "@dnd-kit/utilities": "latest",
-    "@hocuspocus/provider": "latest",
-    "@lexical/code": "0.35.0",
-    "@lexical/link": "0.35.0",
-    "@lexical/list": "0.35.0",
-    "@lexical/markdown": "0.35.0",
-    "@lexical/react": "0.35.0",
-    "@lexical/rich-text": "0.35.0",
-    "@lexical/selection": "0.35.0",
-    "@lexical/table": "0.35.0",
-    "@lexical/utils": "0.35.0",
-    "@lexical/yjs": "0.35.0",
-    "katex": "latest",
-    "lexical": "0.35.0",
-    "lucide-react": "latest",
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
-    "y-protocols": "latest",
-    "yjs": "latest"
-  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "devDependencies": {
-    "@types/katex": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "@vitejs/plugin-react": "latest",
-    "typescript": "latest",
-    "vite": "latest",
-    "vitest": "latest"
+    "turbo": "^2.5.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
