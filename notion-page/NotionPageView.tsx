@@ -20,6 +20,7 @@ interface NotionPageViewProps {
   onPropertyChange?: (propertyId: string, value: StoredPropertyValue) => void;
   onContentChange?: (content: SerializedEditorState) => void;
   onSchemaChange?: (schema: NotionSchema) => void;
+  onEditingLocationChange?: (location: string) => void;
 }
 
 function getMentionPeople(schema: NotionSchema): PersonOption[] {
@@ -39,6 +40,7 @@ export function NotionPageView({
   schema, page, locale, collab,
   onTitleChange, onIconChange, onCoverChange, onCoverPositionChange,
   onPropertyChange, onContentChange, onSchemaChange,
+  onEditingLocationChange,
 }: NotionPageViewProps) {
   const [fullWidth, setFullWidth] = useState(false);
   const [smallFont, setSmallFont] = useState(false);
@@ -46,7 +48,15 @@ export function NotionPageView({
   const mentionPeople = getMentionPeople(schema);
 
   return (
-    <div className={`npc-page-view ${fullWidth ? 'is-full-width' : ''} ${smallFont ? 'is-small-font' : ''}`}>
+    <div
+      className={`npc-page-view ${fullWidth ? 'is-full-width' : ''} ${smallFont ? 'is-small-font' : ''}`}
+      onFocusCapture={(event) => {
+        const target = event.target as HTMLElement;
+        if (target.closest('.npc-title-input, .npc-title-block')) onEditingLocationChange?.('Titulo da pagina');
+        else if (target.closest('.npc-properties-panel')) onEditingLocationChange?.('Propriedades');
+        else if (target.closest('.npc-editor-content-editable')) onEditingLocationChange?.('Corpo do documento');
+      }}
+    >
       <PageHeader
         icon={page.icon}
         coverUrl={page.coverUrl}

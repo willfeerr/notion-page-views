@@ -83,7 +83,18 @@ export interface CollabConfig {
     name: string;
     /** CSS hex color for the collaboration cursor, e.g. "#3B82F6" */
     color: string;
+    /** Human-readable editing area shown beside the collaborator name. */
+    location?: string;
   };
+  onPresenceChange?: (presence: CollabPresence[]) => void;
+}
+
+export interface CollabPresence {
+  clientId: number;
+  userId: string;
+  name: string;
+  color: string;
+  location: string;
 }
 
 export interface NotionPageData {

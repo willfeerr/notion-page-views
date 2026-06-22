@@ -4,6 +4,7 @@ import type { NotionPageData, NotionSchema } from './types';
 import { getPlainTextPreview } from './editor/getPlainTextPreview';
 import { PropertyField } from './fields/PropertyField';
 import { PROPERTY_ICONS } from './propertyTokens';
+import { GripHorizontal, Maximize2, Trash2 } from 'lucide-react';
 
 interface NotionPageCardProps {
   schema: NotionSchema;
@@ -12,6 +13,8 @@ interface NotionPageCardProps {
   /** Which property ids to show on the card. Defaults to every property in the schema. */
   visiblePropertyIds?: string[];
   onClick?: () => void;
+  onDelete?: () => void;
+  showWindowControls?: boolean;
 }
 
 function isEmptyValue(value: unknown): boolean {
@@ -21,7 +24,7 @@ function isEmptyValue(value: unknown): boolean {
 }
 
 /** The "card" view: a compact, read-only summary meant to drop into a board column. */
-export function NotionPageCard({ schema, page, locale, visiblePropertyIds, onClick }: NotionPageCardProps) {
+export function NotionPageCard({ schema, page, locale, visiblePropertyIds, onClick, onDelete, showWindowControls = false }: NotionPageCardProps) {
   const preview = getPlainTextPreview(page.content, 120);
   const visibleProperties = visiblePropertyIds
     ? schema.properties.filter((p) => visiblePropertyIds.includes(p.id))
@@ -30,6 +33,7 @@ export function NotionPageCard({ schema, page, locale, visiblePropertyIds, onCli
   return (
     <div
       className="npc-card"
+      data-window-controls={showWindowControls || undefined}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
@@ -44,6 +48,14 @@ export function NotionPageCard({ schema, page, locale, visiblePropertyIds, onCli
           : undefined
       }
     >
+      {showWindowControls ? (
+        <div className="npc-card-window-controls" draggable={false} onPointerDown={(event) => event.stopPropagation()} onDragStart={(event) => event.preventDefault()}>
+          <button type="button" className="is-delete" title="Excluir pagina" onClick={(event) => { event.stopPropagation(); onDelete?.(); }}><Trash2 size={10} /></button>
+          <span className="is-state" title="Pagina sincronizada" />
+          <button type="button" className="is-open" title="Abrir pagina" onClick={(event) => { event.stopPropagation(); onClick?.(); }}><Maximize2 size={10} /></button>
+          <GripHorizontal size={18} className="npc-card-window-grip" />
+        </div>
+      ) : null}
       {page.coverUrl && <div className="npc-card-cover" style={{ backgroundImage: `url(${page.coverUrl})` }} />}
       <div className="npc-card-body">
         <div className="npc-card-title-row">

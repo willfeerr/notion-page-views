@@ -36,4 +36,11 @@ describe('WorkspaceYjsStore', () => {
     expect(resources.find((resource) => resource.type === 'board')).toMatchObject({ statusPropertyId: 'status' });
     expect(resources.find((resource) => resource.type === 'calendar')).toMatchObject({ datePropertyId: 'due', timezone: 'America/Sao_Paulo' });
   });
+
+  it('keeps newly inserted pages independent until explicitly linked', () => {
+    const store = new WorkspaceYjsStore(new Doc());
+    store.initialize({ schema, pages: [page] });
+    store.insertPage({ ...page, id: 'independent', title: 'Independent page' });
+    expect(store.read().resources?.every((resource) => !resource.pageIds.includes('independent'))).toBe(true);
+  });
 });

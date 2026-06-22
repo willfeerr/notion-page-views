@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, FileJson, GripVertical, Moon, Plus, RotateCcw, Search, Sun, Trash2, X } from 'lucide-react';
+import { CalendarDays, FileJson, FileText, GripVertical, Moon, Plus, RotateCcw, Search, Sun, Trash2, X } from 'lucide-react';
 import type { SerializedEditorState } from 'lexical';
 import { NotionEditor, NotionPageCard, NotionPageView } from '../notion-page';
 import { PropertiesPanel } from '../notion-page/PropertiesPanel';
 import { samplePages, sampleSchema } from '../notion-page/example/sampleData';
-import type { NotionPageData, NotionSchema, StoredPropertyValue } from '../notion-page/types';
+import type { CollabPresence, NotionPageData, NotionSchema, StoredPropertyValue } from '../notion-page/types';
 import { Doc } from 'yjs';
 import { BroadcastProvider } from '../notion-page/editor/BroadcastProvider';
 import { CalendarView } from './CalendarView';
@@ -27,6 +27,14 @@ function loadState(): { schema: NotionSchema; pages: NotionPageData[]; resources
   return { schema: structuredClone(sampleSchema), pages: structuredClone(samplePages) };
 }
 
+function loadCollabUser() {
+  const id = sessionStorage.getItem('skrbe-collab-tab') ?? crypto.randomUUID();
+  sessionStorage.setItem('skrbe-collab-tab', id);
+  const colors = ['#2383e2', '#0f9d76', '#a855f7', '#e0564a', '#d97706'];
+  const color = colors[[...id].reduce((sum, character) => sum + character.charCodeAt(0), 0) % colors.length];
+  return { id, name: localStorage.getItem('skrbe-collab-name') || 'William', color };
+}
+
 export default function App() {
   const [initial] = useState(loadState);
   const [schema, setSchema] = useState(initial.schema);
@@ -40,6 +48,9 @@ export default function App() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingLaneId, setDraggingLaneId] = useState<string | null>(null);
   const [editingLaneId, setEditingLaneId] = useState<string | null>(null);
+  const [collabUser, setCollabUser] = useState(loadCollabUser);
+  const [presence, setPresence] = useState<CollabPresence[]>([]);
+  const [editingLocation, setEditingLocation] = useState('Corpo do documento');
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const stored = localStorage.getItem('skrbe-theme');
     if (stored === 'light' || stored === 'dark') return stored;
@@ -79,6 +90,8 @@ export default function App() {
   const openPage = pages.find((page) => page.id === openId) ?? pages[0] ?? null;
   const activeResource = resources.find((resource) => resource.id === activeResourceId) ?? resources[0];
   const activeSchema = useMemo(() => schemaForResource(schema, activeResource), [activeResource, schema]);
+  const openPageIsInActiveResource = Boolean(openPage && activeResource?.pageIds.includes(openPage.id));
+  const openPageSchema = openPageIsInActiveResource ? activeSchema : schema;
   const statusDefinition = activeResource?.type === 'board'
     ? schema.properties.find((property) => property.id === activeResource.statusPropertyId && property.type === 'status')
     : undefined;
@@ -152,7 +165,7 @@ export default function App() {
     } as Partial<WorkspaceResource>);
   }
 
-  function createPage(statusId?: string, afterPageId?: string) {
+  function createPage(statusId?: string, afterPageId?: string, resourceId?: string) {
     const now = new Date().toISOString();
     const properties = Object.fromEntries(schema.properties.map((definition) => [definition.id, emptyValueFor(definition)]));
     if (statusDefinition && statusId) properties[statusDefinition.id] = statusId;
@@ -164,9 +177,14 @@ export default function App() {
       content: null, createdTime: now, lastEditedTime: now,
     };
     workspaceStoreRef.current?.insertPage(page, afterPageId);
-    if (activeResource) workspaceStoreRef.current?.linkPage(activeResource.id, page.id, afterPageId);
+    if (resourceId) workspaceStoreRef.current?.linkPage(resourceId, page.id, afterPageId);
     setOpenId(page.id);
     setView('page');
+  }
+
+  function createBoardPage(statusId = statusOptions[0]?.id, afterPageId?: string) {
+    if (activeResource?.type !== 'board') return;
+    createPage(statusId, afterPageId, activeResource.id);
   }
 
   function movePage(pageId: string, statusId: string) {
@@ -297,6 +315,13 @@ export default function App() {
     setView(activeResource?.type ?? 'board');
   }
 
+  function renameCollabUser() {
+    const name = prompt('Nome exibido nos cursores colaborativos', collabUser.name)?.trim();
+    if (!name) return;
+    localStorage.setItem('skrbe-collab-name', name);
+    setCollabUser((current) => ({ ...current, name }));
+  }
+
   function exportActiveResource() {
     if (!activeResource) return;
     downloadJson(activeResource.title, resourceExport(activeResource, pages, schema));
@@ -335,7 +360,14 @@ export default function App() {
           <button type="button" onClick={() => setCreatingType('board')}><Plus size={13} />Board</button>
           <button type="button" onClick={() => setCreatingType('calendar')}><Plus size={13} />Calendario</button>
         </div>
-        <button className={view === 'page' ? 'is-active' : ''} onClick={() => setView('page')} disabled={!openPage}>□ Pagina</button>
+        <div className="lab-sidebar-label"><span>PAGINAS</span><button type="button" title="Nova pagina independente" onClick={() => createPage()}><Plus size={13} /></button></div>
+        <div className="lab-page-list">
+          {pages.map((page) => (
+            <button key={page.id} type="button" className={view === 'page' && openPage?.id === page.id ? 'is-active' : ''} onClick={() => { setOpenId(page.id); setView('page'); }}>
+              <span>{page.icon || <FileText size={13} />}</span><span>{page.title || 'Sem titulo'}</span>
+            </button>
+          ))}
+        </div>
         <div className="lab-sidebar-foot"><button onClick={resetDemo}><RotateCcw size={14} />Restaurar demo</button></div>
       </aside>
 
@@ -354,7 +386,7 @@ export default function App() {
 
         {view === 'board' && (
           <section className="lab-board-view">
-            <div className="lab-heading"><div><span>BOARD</span><h1>{activeResource?.type === 'board' ? activeResource.title : 'Board'}</h1></div><button onClick={() => createPage()}><Plus size={15} />Nova pagina</button></div>
+            <div className="lab-heading"><div><span>BOARD</span><h1>{activeResource?.type === 'board' ? activeResource.title : 'Board'}</h1></div><button onClick={() => createBoardPage()}><Plus size={15} />Novo card</button></div>
             <div className="lab-board">
               {statusOptions.map((status) => {
                 const columnPages = activePages.filter((page) => page.properties[statusDefinition?.id ?? 'status'] === status.id);
@@ -383,7 +415,7 @@ export default function App() {
                         />
                       ) : <button className="lab-lane-title" type="button" title="Renomear lane" onClick={() => setEditingLaneId(status.id)}>{status.name}</button>}
                       <b>{columnPages.length}</b>
-                      <button type="button" title="Adicionar card" onClick={() => createPage(status.id)}><Plus size={14} /></button>
+                      <button type="button" title="Adicionar card" onClick={() => createBoardPage(status.id)}><Plus size={14} /></button>
                       <button type="button" title="Excluir lane" disabled={statusOptions.length <= 1} onClick={() => deleteLane(status.id)}><Trash2 size={13} /></button>
                     </header>
                     <div className="lab-card-list">
@@ -396,17 +428,17 @@ export default function App() {
                           setDraggingId(null);
                         }}>
                           <div draggable onDragStart={() => setDraggingId(page.id)} onDragEnd={() => setDraggingId(null)} className={draggingId === page.id ? 'is-dragging' : ''}>
-                          <NotionPageCard schema={activeSchema} page={page} visiblePropertyIds={activeSchema.properties.filter((property) => property.id !== statusDefinition?.id).slice(0, 4).map((property) => property.id)} onClick={() => { setOpenId(page.id); setView('page'); }} />
+                          <NotionPageCard schema={activeSchema} page={page} visiblePropertyIds={activeSchema.properties.filter((property) => property.id !== statusDefinition?.id).slice(0, 4).map((property) => property.id)} showWindowControls onDelete={() => workspaceStoreRef.current?.deletePage(page.id)} onClick={() => { setOpenId(page.id); setView('page'); }} />
                           </div>
                           <div className="lab-insert-row">
                             <span />
-                            <button type="button" onClick={() => createPage(status.id, page.id)} title="Adicionar pagina depois deste card">+</button>
+                            <button type="button" onClick={() => createBoardPage(status.id, page.id)} title="Adicionar pagina depois deste card">+</button>
                             <span />
                           </div>
                         </div>
                       ))}
                     </div>
-                    <button className="lab-add-card" onClick={() => createPage(status.id)}>+ Nova pagina</button>
+                    <button className="lab-add-card" onClick={() => createBoardPage(status.id)}>+ Novo card</button>
                   </section>
                 );
               })}
@@ -435,20 +467,26 @@ export default function App() {
           <section className="lab-page-stage">
             <div className="lab-page-toolbar">
               <button onClick={() => setView(activeResource?.type ?? 'board')}>← {activeResource?.title ?? 'Workspace'}</button>
-              <span>Salvo no Yjs local</span>
+              <button type="button" className="lab-presence-summary" onClick={renameCollabUser} title={presence.length ? presence.map((item) => `${item.name} · ${item.location}`).join('\n') : 'Alterar nome colaborativo'}>
+                <i style={{ background: collabUser.color }} />
+                <span>{collabUser.name} · {editingLocation}</span>
+                {presence.filter((item) => item.userId !== collabUser.id).slice(0, 3).map((item) => <i key={item.clientId} style={{ background: item.color }} title={`${item.name} · ${item.location}`} />)}
+                {presence.length > 4 ? <b>+{presence.length - 4}</b> : null}
+              </button>
               <div><button type="button" title="Exportar pagina como JSON" onClick={() => downloadJson(openPage.title, pageExport(openPage, schema))}><FileJson size={14} />Exportar JSON</button><button type="button" title="Excluir pagina" onClick={deleteOpenPage}><Trash2 size={14} /></button><button title="Fechar" onClick={() => setView(activeResource?.type ?? 'board')}><X size={15} /></button></div>
             </div>
             <NotionPageView
-              schema={activeSchema}
+              schema={openPageSchema}
               page={openPage}
-              collab={{ transport: 'broadcast', room: `page-${openPage.id}`, user: { id: 'local-user', name: 'Voce', color: '#2383e2' } }}
+              collab={{ transport: 'broadcast', room: `page-${openPage.id}`, user: { ...collabUser, location: editingLocation }, onPresenceChange: setPresence }}
               onTitleChange={(title) => updatePage(openPage.id, { title })}
               onIconChange={(icon) => updatePage(openPage.id, { icon })}
               onCoverChange={(coverUrl) => updatePage(openPage.id, { coverUrl })}
               onCoverPositionChange={(coverPosition) => updatePage(openPage.id, { coverPosition })}
               onPropertyChange={(propertyId, value) => updateProperty(openPage.id, propertyId, value)}
               onContentChange={(content: SerializedEditorState) => updatePage(openPage.id, { content })}
-              onSchemaChange={updateSchema}
+              onSchemaChange={openPageIsInActiveResource ? updateSchema : (next) => workspaceStoreRef.current?.applySchema(next)}
+              onEditingLocationChange={setEditingLocation}
             />
           </section>
         )}

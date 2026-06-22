@@ -45,7 +45,7 @@ export type {
   PropertyColor, PropertyType, PropertyDefinition,
   SelectOption, StatusGroup, PersonOption,
   StoredPropertyValue, PageProperties,
-  NotionSchema, NotionPageData, CollabConfig,
+  NotionSchema, NotionPageData, CollabConfig, CollabPresence,
   TextPropertyDefinition, NumberPropertyDefinition,
   SelectPropertyDefinition, MultiSelectPropertyDefinition, StatusPropertyDefinition,
   DatePropertyDefinition, PersonPropertyDefinition, CheckboxPropertyDefinition,
