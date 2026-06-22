@@ -30,7 +30,7 @@ function textValue(value: unknown) {
   return '';
 }
 
-function deriveActions(schema: NotionSchema, page: NotionPageData): CardQuickAction[] {
+export function deriveCardQuickActions(schema: NotionSchema, page: NotionPageData): CardQuickAction[] {
   const actions: CardQuickAction[] = [];
   const seen = new Set<string>();
   const push = (kind: CardQuickActionKind, href: string | undefined, label: string, id: string) => {
@@ -68,7 +68,7 @@ function deriveActions(schema: NotionSchema, page: NotionPageData): CardQuickAct
 }
 
 export function CardQuickActions({ schema, page, actions = [] }: { schema: NotionSchema; page: NotionPageData; actions?: CardQuickAction[] }) {
-  const items = [...deriveActions(schema, page), ...actions];
+  const items = [...deriveCardQuickActions(schema, page), ...actions];
   if (!items.length) return null;
   return <div className="npc-card-quick-actions" aria-label="Acoes rapidas">
     {items.map((action) => {
