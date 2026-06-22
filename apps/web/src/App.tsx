@@ -9,7 +9,7 @@ import { Doc } from 'yjs';
 import { BroadcastProvider } from '../notion-page/editor/BroadcastProvider';
 import { CalendarView } from './CalendarView';
 import { WorkspaceYjsStore } from './workspaceYjs';
-import { downloadJson, pageExport, pageSearchText, resourceExport } from './exportJson';
+import { downloadJson, pageExport, pageSearchText, workspaceExport } from './exportJson';
 import {
   buildProperty, createId, emptyValueFor, normalizeDateValue, schemaForResource,
   type BoardResource, type CalendarResource, type WorkspaceResource,
@@ -293,11 +293,17 @@ export default function App() {
     setActiveResourceId(resource.id);
     setView(type);
     setCreatingType(null);
+    closeMobileSidebar();
+  }
+
+  function closeMobileSidebar() {
+    if (window.matchMedia('(max-width: 760px)').matches) setSidebarCollapsed(true);
   }
 
   function openResource(resource: WorkspaceResource) {
     setActiveResourceId(resource.id);
     setView(resource.type);
+    closeMobileSidebar();
   }
 
   function renameResource(resource: WorkspaceResource) {
@@ -330,9 +336,8 @@ export default function App() {
     setCollabUser((current) => ({ ...current, name }));
   }
 
-  function exportActiveResource() {
-    if (!activeResource) return;
-    downloadJson(activeResource.title, resourceExport(activeResource, pages, schema));
+  function exportWorkspace() {
+    downloadJson('skrbe-workspace', workspaceExport(resources, pages, schema));
   }
 
   if (preview.kind === 'page') {
@@ -377,13 +382,14 @@ export default function App() {
         <div className="lab-sidebar-label"><span>PAGINAS</span><button type="button" title="Nova pagina independente" onClick={() => createPage()}><Plus size={13} /></button></div>
         <div className="lab-page-list">
           {pages.map((page) => (
-            <button key={page.id} type="button" title={page.title || 'Sem titulo'} className={view === 'page' && openPage?.id === page.id ? 'is-active' : ''} onClick={() => { setOpenId(page.id); setView('page'); }}>
+            <button key={page.id} type="button" title={page.title || 'Sem titulo'} className={view === 'page' && openPage?.id === page.id ? 'is-active' : ''} onClick={() => { setOpenId(page.id); setView('page'); closeMobileSidebar(); }}>
               <span>{page.icon || <FileText size={13} />}</span><span>{page.title || 'Sem titulo'}</span>
             </button>
           ))}
         </div>
         <div className="lab-sidebar-foot"><button title="Restaurar demo" onClick={resetDemo}><RotateCcw size={14} /><span>Restaurar demo</span></button></div>
       </aside>
+      <button type="button" className="lab-sidebar-scrim" aria-label="Fechar menu" onClick={() => setSidebarCollapsed(true)} />
 
       <main className="lab-main">
         <header className="lab-topbar">
@@ -393,7 +399,7 @@ export default function App() {
             <button className="lab-theme-toggle" type="button" title={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
               {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
             </button>
-            <button className="lab-export-button" type="button" title="Exportar recurso como JSON" onClick={exportActiveResource}><FileJson size={14} />JSON</button>
+            <button className="lab-export-button" type="button" title="Exportar workspace indexavel como JSON" onClick={exportWorkspace}><FileJson size={14} />JSON</button>
             <button onClick={() => createPage()}><Plus size={14} />Nova pagina</button>
           </div>
         </header>

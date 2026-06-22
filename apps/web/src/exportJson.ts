@@ -65,14 +65,38 @@ export function pageSearchText(page: NotionPageData, schema: NotionSchema): stri
 
 export function resourceExport(resource: WorkspaceResource, pages: NotionPageData[], schema: NotionSchema) {
   const resourcePages = pages.filter((page) => resource.pageIds.includes(page.id));
+  const exportedPages = resourcePages.map((page) => pageExport(page, schema));
   return {
     kind: resource.type,
     version: 1,
     exportedAt: new Date().toISOString(),
     resource,
     schema,
-    pages: resourcePages.map((page) => pageExport(page, schema)),
-    index: resourcePages.map((page) => pageExport(page, schema).index),
+    pages: exportedPages,
+    index: {
+      id: resource.id,
+      type: resource.type,
+      title: resource.title,
+      searchableText: [resource.title, ...exportedPages.map((page) => page.index.searchableText)].join(' ').replace(/\s+/g, ' ').trim(),
+      pages: exportedPages.map((page) => page.index),
+    },
+  };
+}
+
+export function workspaceExport(resources: WorkspaceResource[], pages: NotionPageData[], schema: NotionSchema) {
+  const exportedPages = pages.map((page) => pageExport(page, schema));
+  const exportedResources = resources.map((resource) => resourceExport(resource, pages, schema));
+  return {
+    kind: 'workspace',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    schema,
+    pages: exportedPages,
+    resources: exportedResources,
+    index: {
+      pages: exportedPages.map((page) => page.index),
+      resources: exportedResources.map((resource) => resource.index),
+    },
   };
 }
 

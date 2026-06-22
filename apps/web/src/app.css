@@ -57,6 +57,7 @@ button { cursor: pointer; }
 .lab-page-list > button > span:first-child { display: grid; place-items: center; font-size: 13px; }
 .lab-page-list > button > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .lab-sidebar-foot { margin-top: auto; }
+.lab-sidebar-scrim { display: none; }
 .is-sidebar-collapsed .lab-sidebar { padding-inline: 8px; }
 .is-sidebar-collapsed .lab-brand { justify-content: center; padding-inline: 6px; }
 .is-sidebar-collapsed .lab-brand strong, .is-sidebar-collapsed .lab-brand-mark { display: none; }
@@ -268,15 +269,45 @@ button { cursor: pointer; }
 
 @media (max-width: 760px) {
   .lab-shell, .lab-shell.is-sidebar-collapsed { --lab-sidebar-width: 56px; grid-template-columns: var(--lab-sidebar-width) minmax(0, 1fr); }
-  .lab-sidebar { position: sticky; width: 56px; height: 100dvh; flex-direction: column; align-items: stretch; overflow: hidden; border-right: 1px solid var(--sk-border); border-bottom: 0; }
-  .lab-shell:not(.is-sidebar-collapsed) .lab-sidebar { position: fixed; z-index: 100; width: min(240px, calc(100vw - 40px)); box-shadow: 12px 0 36px rgb(0 0 0 / 22%); }
+  .lab-sidebar { position: sticky; width: 56px; height: 100dvh; flex-direction: column; align-items: stretch; overflow: hidden; padding-top: max(14px, env(safe-area-inset-top)); padding-bottom: max(14px, env(safe-area-inset-bottom)); border-right: 1px solid var(--sk-border); border-bottom: 0; }
+  .lab-shell:not(.is-sidebar-collapsed) .lab-sidebar { position: fixed; z-index: 100; width: min(280px, calc(100vw - 32px)); box-shadow: 12px 0 36px rgb(0 0 0 / 28%); }
+  .lab-shell:not(.is-sidebar-collapsed) .lab-sidebar-scrim { position: fixed; inset: 0; z-index: 90; display: block; padding: 0; border: 0; background: rgb(0 0 0 / 42%); }
   .lab-shell:not(.is-sidebar-collapsed) .lab-brand strong { display: block; }
   .lab-shell:not(.is-sidebar-collapsed) .lab-page-list { max-height: min(38vh, 340px); }
+  .is-sidebar-collapsed .lab-sidebar-label button,
+  .is-sidebar-collapsed .lab-resource-row button:first-child,
+  .is-sidebar-collapsed .lab-page-list > button,
+  .is-sidebar-collapsed .lab-sidebar-foot button { width: 40px; height: 40px; margin-inline: auto; }
+  .lab-main { min-width: 0; }
+  .lab-topbar { height: 50px; gap: 6px; padding: 0 8px 0 10px; }
+  .lab-search { min-width: 0; width: auto; flex: 1; }
+  .lab-search input { min-width: 0; }
+  .lab-top-actions { flex: 0 0 auto; gap: 4px; }
   .lab-top-actions > span { display: none; }
-  .lab-column, .lab-add-lane { min-width: 240px; }
-  .lab-calendar-view { padding: 24px 12px; }
-  .lab-calendar-toolbar { align-items: flex-start; flex-direction: column; }
+  .lab-top-actions button { width: 36px; height: 36px; justify-content: center; padding: 0; font-size: 0; }
+  .lab-top-actions button svg { flex: 0 0 auto; }
+  .lab-board-view { height: calc(100% - 50px); padding: 16px 10px 10px; }
+  .lab-heading { align-items: center; gap: 10px; margin-bottom: 12px; }
+  .lab-heading h1 { overflow: hidden; margin-top: 2px; font-size: 19px; text-overflow: ellipsis; white-space: nowrap; }
+  .lab-heading > button { min-width: 40px; min-height: 40px; justify-content: center; padding: 0 10px; }
+  .lab-column, .lab-add-lane { width: min(260px, 82vw); min-width: min(260px, 82vw); }
+  .lab-page-toolbar { top: 50px; height: 44px; padding: 0 6px; }
+  .lab-page-toolbar > button:first-child { max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lab-page-toolbar .lab-presence-summary { width: 34px; padding-inline: 8px; }
+  .lab-page-toolbar .lab-presence-summary span, .lab-page-toolbar .lab-presence-summary b { display: none; }
+  .lab-page-toolbar button { min-height: 34px; }
+  .lab-calendar-view { padding: 16px 10px 28px; }
+  .lab-calendar-heading small { display: block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lab-calendar-toolbar { align-items: stretch; flex-direction: column; gap: 8px; padding: 9px; }
+  .lab-calendar-navigation { min-width: 0; }
+  .lab-calendar-navigation strong { min-width: 0; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+  .lab-calendar-toolbar button { min-width: 38px; height: 38px; }
   .lab-calendar-year { grid-template-columns: repeat(2, minmax(190px, 1fr)); overflow-x: auto; }
   .lab-calendar-modes { width: 100%; }
-  .lab-calendar-modes button span { display: none; }
+  .lab-calendar-modes { padding-bottom: 2px; scrollbar-width: thin; }
+  .lab-calendar-modes button span { display: inline; }
+  .lab-calendar-grid { scroll-snap-type: x proximity; }
+  .lab-calendar-day { scroll-snap-align: start; }
+  .lab-dialog-backdrop { align-items: end; padding: 0; }
+  .lab-dialog { width: 100%; max-height: 88dvh; overflow-y: auto; border-radius: 8px 8px 0 0; padding-bottom: env(safe-area-inset-bottom); }
 }

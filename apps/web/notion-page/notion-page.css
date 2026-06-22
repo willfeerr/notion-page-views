@@ -963,11 +963,18 @@
 }
 
 @media (max-width: 640px) {
-  .npc-title-block { padding-left: 20px; padding-right: 20px; }
-  .npc-page-body { padding-left: 20px; padding-right: 20px; }
-  .npc-page-controls { padding-left: 20px; padding-right: 20px; opacity: 1; overflow-x: auto; }
-  .npc-property-row { display: grid; grid-template-columns: minmax(110px, 38%) 1fr; }
-  .npc-property-label { width: auto; min-width: 0; }
+  .npc-cover { height: 150px; border-radius: 0; }
+  .npc-title-block { padding: 20px 14px 6px; }
+  .npc-title-block.has-cover { margin-top: -32px; }
+  .npc-page-icon { font-size: 42px; }
+  .npc-title-actions { min-height: 34px; opacity: 1; overflow-x: auto; }
+  .npc-title-input { font-size: 30px; line-height: 1.16; }
+  .npc-page-body { padding: 4px 14px max(64px, env(safe-area-inset-bottom)); }
+  .npc-page-controls { padding-left: 14px; padding-right: 14px; opacity: 1; overflow-x: auto; }
+  .npc-property-row { display: block; min-height: 56px; padding: 5px 4px; }
+  .npc-property-label { width: 100%; min-width: 0; padding-bottom: 1px; font-size: 11px; }
+  .npc-property-value-cell { width: 100%; min-height: 34px; padding: 1px 4px; }
+  .npc-text-input { min-height: 34px; font-size: 16px; }
   .npc-editor-wrap { display: block; }
   .npc-toc { width: auto; position: static; margin-bottom: 20px; }
 }
