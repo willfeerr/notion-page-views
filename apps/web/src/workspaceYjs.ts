@@ -201,8 +201,9 @@ export class WorkspaceYjsStore {
     seed.pages.forEach((page) => this.initialContent.set(page.id, page.content));
     if (!this.definitions.size && !this.pageMaps.size) this.replaceDatabase(seed);
     const schema = this.readSchema();
-    const resources = (seed.resources?.map((resource) => normalizeResource(resource, schema)).filter((resource): resource is WorkspaceResource => Boolean(resource))
-      ?? defaultResources(schema, seed.pages));
+    const migratedResources = seed.resources?.map((resource) => normalizeResource(resource, schema))
+      .filter((resource): resource is WorkspaceResource => Boolean(resource)) ?? [];
+    const resources = migratedResources.length ? migratedResources : defaultResources(schema, seed.pages);
     if (!this.references.size) {
       resources.forEach((resource) => this.ensureResourceRoom(resource));
       this.workspaceDocument.transact(() => {
@@ -303,8 +304,9 @@ export class WorkspaceYjsStore {
     this.initialContent.clear();
     state.pages.forEach((page) => this.initialContent.set(page.id, page.content));
     this.replaceDatabase(state);
-    const resources = state.resources?.map((resource) => normalizeResource(resource, state.schema)).filter((resource): resource is WorkspaceResource => Boolean(resource))
-      ?? defaultResources(state.schema, state.pages);
+    const migratedResources = state.resources?.map((resource) => normalizeResource(resource, state.schema))
+      .filter((resource): resource is WorkspaceResource => Boolean(resource)) ?? [];
+    const resources = migratedResources.length ? migratedResources : defaultResources(state.schema, state.pages);
     resources.forEach((resource) => {
       const room = this.ensureResourceRoom(resource);
       room.document.transact(() => writeResource(room.resource, resource), 'view-replace');
