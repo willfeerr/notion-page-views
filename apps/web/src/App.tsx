@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from 'react';
-import { DndContext, PointerSensor, TouchSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { DndContext, DragOverlay, PointerSensor, TouchSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { createPortal } from 'react-dom';
 import { CalendarDays, FileJson, FileText, GripVertical, Moon, PanelLeftClose, PanelLeftOpen, Plus, RotateCcw, Search, Sun, Trash2, X } from 'lucide-react';
 import type { SerializedEditorState } from 'lexical';
 import { NotionEditor, NotionPageCard, NotionPageView } from '../notion-page';
@@ -28,7 +29,7 @@ function BoardLaneDrop({ statusId, children, onLaneDrop }: { statusId: string; c
 function BoardCardDnd({ pageId, statusId, dragging, renderCard, after }: { pageId: string; statusId: string; dragging: boolean; renderCard: (dragHandleProps: ButtonHTMLAttributes<HTMLButtonElement>) => ReactNode; after: ReactNode }) {
   const draggable = useDraggable({ id: `board-card:${pageId}`, data: { pageId } });
   const droppable = useDroppable({ id: `board-card-drop:${pageId}`, data: { statusId, beforePageId: pageId } });
-  const style = draggable.transform ? { transform: `translate3d(${draggable.transform.x}px, ${draggable.transform.y}px, 0)` } as CSSProperties : undefined;
+  const style = draggable.transform && !dragging ? { transform: `translate3d(${draggable.transform.x}px, ${draggable.transform.y}px, 0)` } as CSSProperties : undefined;
   const dragHandleProps = { ...draggable.attributes, ...draggable.listeners } as ButtonHTMLAttributes<HTMLButtonElement>;
   return <div ref={droppable.setNodeRef} className={`lab-card-slot${droppable.isOver ? ' is-dnd-over' : ''}`}>
     <div ref={draggable.setNodeRef} style={style} className={`lab-board-card-drag${dragging ? ' is-dragging' : ''}`}>{renderCard(dragHandleProps)}</div>
@@ -135,6 +136,8 @@ export default function App() {
     ? schema.properties.find((property) => property.id === activeResource.statusPropertyId && property.type === 'status')
     : undefined;
   const statusOptions = statusDefinition?.type === 'status' ? statusDefinition.options : [];
+  const boardVisiblePropertyIds = activeSchema.properties.filter((property) => property.id !== statusDefinition?.id).slice(0, 4).map((property) => property.id);
+  const draggingPage = draggingId ? pages.find((page) => page.id === draggingId) ?? null : null;
   const visiblePages = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('pt-BR');
     return normalized ? pages.filter((page) => pageSearchText(page, schema).toLocaleLowerCase('pt-BR').includes(normalized)) : pages;
@@ -479,7 +482,7 @@ export default function App() {
                     </header>
                     <div className="lab-card-list">
                       {columnPages.map((page) => (
-                        <BoardCardDnd key={page.id} pageId={page.id} statusId={status.id} dragging={draggingId === page.id} renderCard={(dragHandleProps) => <NotionPageCard schema={activeSchema} page={page} visiblePropertyIds={activeSchema.properties.filter((property) => property.id !== statusDefinition?.id).slice(0, 4).map((property) => property.id)} showWindowControls dragHandleProps={dragHandleProps} onDelete={() => workspaceStoreRef.current?.deletePage(page.id)} onPropertyChange={(propertyId, value) => updateProperty(page.id, propertyId, value)} onContentChange={(content) => updatePage(page.id, { content })} onClick={() => { setOpenId(page.id); setView('page'); }} />} after={<div className="lab-insert-row">
+                        <BoardCardDnd key={page.id} pageId={page.id} statusId={status.id} dragging={draggingId === page.id} renderCard={(dragHandleProps) => <NotionPageCard schema={activeSchema} page={page} visiblePropertyIds={boardVisiblePropertyIds} showWindowControls dragHandleProps={dragHandleProps} onDelete={() => workspaceStoreRef.current?.deletePage(page.id)} onPropertyChange={(propertyId, value) => updateProperty(page.id, propertyId, value)} onContentChange={(content) => updatePage(page.id, { content })} onClick={() => { setOpenId(page.id); setView('page'); }} />} after={<div className="lab-insert-row">
                             <span />
                             <button type="button" onClick={() => createBoardPage(status.id, page.id)} title="Adicionar pagina depois deste card">+</button>
                             <span />
@@ -492,6 +495,16 @@ export default function App() {
               })}
               <button className="lab-add-lane" type="button" aria-label="Adicionar lane" onClick={addLane}><Plus size={18} /><span>Adicionar lane</span></button>
             </div>
+            {createPortal(
+              <DragOverlay dropAnimation={null}>
+                {draggingPage ? (
+                  <div className="lab-drag-overlay">
+                    <NotionPageCard schema={activeSchema} page={draggingPage} visiblePropertyIds={boardVisiblePropertyIds} showWindowControls />
+                  </div>
+                ) : null}
+              </DragOverlay>,
+              document.body,
+            )}
             </DndContext>
           </section>
         )}
