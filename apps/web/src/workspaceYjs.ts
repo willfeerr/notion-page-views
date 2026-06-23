@@ -12,6 +12,8 @@ export interface WorkspaceState {
   schema: NotionSchema;
   pages: NotionPageData[];
   resources?: WorkspaceResource[];
+  /** Schema resolved from the owning database for each page. */
+  pageSchemas?: Record<string, NotionSchema>;
 }
 
 export interface RoomProvider { destroy(): void; }
@@ -402,8 +404,13 @@ export class WorkspaceYjsStore {
   }
 
   read(): WorkspaceState {
-    const schemas = [...this.databaseRooms.values()].map(roomSchema);
-    const pages = [...this.databaseRooms.values()].flatMap((room) => roomPages(room, this.initialContent));
+    const rooms = [...this.databaseRooms.values()];
+    const schemas = rooms.map(roomSchema);
+    const pages = rooms.flatMap((room) => roomPages(room, this.initialContent));
+    const pageSchemas = Object.fromEntries(rooms.flatMap((room) => {
+      const databaseSchema = roomSchema(room);
+      return roomPageIds(room).map((pageId) => [pageId, databaseSchema]);
+    }));
     const propertyIds = new Set<string>();
     const schema: NotionSchema = {
       properties: schemas.flatMap((item) => item.properties).filter((property) => {
@@ -412,7 +419,7 @@ export class WorkspaceYjsStore {
         return true;
       }),
     };
-    return { schema, pages, resources: this.readResources() };
+    return { schema, pages, resources: this.readResources(), pageSchemas };
   }
 
   private readResources(): WorkspaceResource[] {
@@ -540,6 +547,33 @@ export class WorkspaceYjsStore {
     });
   }
 
+  applyPageSchema(pageId: string, schema: NotionSchema, fallbackByPropertyId: Record<string, StoredPropertyValue> = {}): void {
+    const source = this.findPageRoom(pageId);
+    const sourceMap = source?.pages.get(pageId);
+    if (!source || !sourceMap) return;
+    if (source.id !== 'standalone') {
+      this.applySchema(source.id, schema, fallbackByPropertyId);
+      return;
+    }
+
+    const databaseId = 'page-properties-' + pageId;
+    const page = readPage(pageId, sourceMap, this.initialContent.get(pageId) ?? null);
+    page.properties = Object.fromEntries(schema.properties.map((definition) => [
+      definition.id,
+      page.properties[definition.id] ?? fallbackByPropertyId[definition.id] ?? emptyValueFor(definition),
+    ]));
+    const target = this.ensureDatabaseRoom(databaseId, { schema, pages: [] }, page.title || 'Propriedades da pagina');
+    target.document.transact(() => {
+      target.pages.set(pageId, createPageMap(page));
+      if (!target.pageOrder.toArray().includes(pageId)) target.pageOrder.push([pageId]);
+    }, 'page-properties-create');
+    source.document.transact(() => {
+      source.pages.delete(pageId);
+      const index = source.pageOrder.toArray().indexOf(pageId);
+      if (index >= 0) source.pageOrder.delete(index, 1);
+    }, 'page-properties-detach-standalone');
+  }
+
   insertPage(page: NotionPageData, afterPageId?: string, databaseId = 'standalone'): void {
     this.initialContent.set(page.id, page.content);
     const room = this.ensureDatabaseRoom(databaseId, { schema: { properties: [] }, pages: [] }, databaseId === 'standalone' ? 'Paginas independentes' : databaseId);
@@ -582,35 +616,35 @@ export class WorkspaceYjsStore {
     sourcePage.properties = Object.fromEntries(targetSchema.properties.map((definition) => [
       definition.id, sourcePage.properties[definition.id] ?? emptyValueFor(definition),
     ]));
+    target.document.transact(() => {
+      target.pages.set(pageId, createPageMap(sourcePage));
+      if (!target.pageOrder.toArray().includes(pageId)) target.pageOrder.push([pageId]);
+    }, 'page-move-target');
     source.document.transact(() => {
       source.pages.delete(pageId);
       const index = source.pageOrder.toArray().indexOf(pageId);
       if (index >= 0) source.pageOrder.delete(index, 1);
     }, 'page-move-source');
-    target.document.transact(() => {
-      target.pages.set(pageId, createPageMap(sourcePage));
-      target.pageOrder.push([pageId]);
-    }, 'page-move-target');
   }
 
   unlinkPage(resourceId: string, pageId: string): void {
     const resource = this.readResources().find((item) => item.id === resourceId);
     if (!resource?.pageIds.includes(pageId)) return;
-    const standalone = this.ensureDatabaseRoom('standalone', { schema: { properties: [] }, pages: [] }, 'Paginas independentes');
     const source = this.databaseRooms.get(resource.databaseId);
     const sourceMap = source?.pages.get(pageId);
     if (!source || !sourceMap) return;
     const page = readPage(pageId, sourceMap, this.initialContent.get(pageId) ?? null);
-    page.properties = {};
+    const databaseId = 'page-properties-' + pageId;
+    const target = this.ensureDatabaseRoom(databaseId, { schema: roomSchema(source), pages: [] }, page.title || 'Propriedades da pagina');
+    target.document.transact(() => {
+      target.pages.set(pageId, createPageMap(page));
+      if (!target.pageOrder.toArray().includes(pageId)) target.pageOrder.push([pageId]);
+    }, 'page-unlink-target');
     source.document.transact(() => {
       source.pages.delete(pageId);
       const index = source.pageOrder.toArray().indexOf(pageId);
       if (index >= 0) source.pageOrder.delete(index, 1);
     }, 'page-unlink-source');
-    standalone.document.transact(() => {
-      standalone.pages.set(pageId, createPageMap(page));
-      standalone.pageOrder.push([pageId]);
-    }, 'page-unlink-target');
   }
 
   updateResource(resourceId: string, patch: Partial<WorkspaceResource>): void {
