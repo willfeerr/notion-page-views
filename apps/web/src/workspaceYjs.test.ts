@@ -42,6 +42,28 @@ describe('WorkspaceYjsStore', () => {
     expect(resources.find((resource) => resource.type === 'calendar')).toMatchObject({ datePropertyId: 'due', timezone: 'America/Sao_Paulo' });
   });
 
+  it('creates a board with independent pages, properties and grouping status', () => {
+    const store = createStore();
+    store.initialize({ schema, pages: [page] });
+    const boardStatus: NotionSchema['properties'][number] = {
+      id: 'status-new-board', name: 'New board status', type: 'status',
+      options: [{ id: 'new-todo', name: 'Todo', color: 'gray' }], groups: [],
+    };
+    store.createResource({
+      id: 'board-new', type: 'board', title: 'New board', pageIds: [],
+      propertyIds: [boardStatus.id], statusPropertyId: boardStatus.id,
+    }, [boardStatus]);
+
+    const resources = store.read().resources ?? [];
+    const original = resources.find((resource) => resource.id === 'board-roadmap');
+    const created = resources.find((resource) => resource.id === 'board-new');
+    expect(created).toMatchObject({
+      pageIds: [], propertyIds: ['status-new-board'], statusPropertyId: 'status-new-board',
+    });
+    expect(original?.pageIds).toEqual(['page-1']);
+    expect(original?.propertyIds).not.toContain('status-new-board');
+  });
+
   it('keeps newly inserted pages independent until explicitly linked', () => {
     const store = createStore();
     store.initialize({ schema, pages: [page] });
