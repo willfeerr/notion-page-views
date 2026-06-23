@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { Array as YArray, Doc, applyUpdate, encodeStateAsUpdate } from 'yjs';
 import type { NotionPageData, NotionSchema } from '../notion-page/types';
 import { WorkspaceYjsStore } from './workspaceYjs';
 
-function createStore(onRoom?: (room: string) => void) {
-  return new WorkspaceYjsStore((room) => {
+function createStore(onRoom?: (room: string) => void, persisted: Map<string, Doc> = new Map()) {
+  return new WorkspaceYjsStore((room, document) => {
     onRoom?.(room);
+    const source = persisted.get(room);
+    if (source) applyUpdate(document, encodeStateAsUpdate(source));
     return { destroy() {} };
   });
 }
@@ -93,6 +96,38 @@ describe('WorkspaceYjsStore', () => {
     expect(isolated?.pageIds).toEqual(['isolated-page']);
     expect(original?.propertyIds).not.toContain(isolatedStatus.id);
     expect(isolated?.propertyIds).toEqual([isolatedStatus.id]);
+  });
+
+  it('migrates a legacy custom view into its own versioned database', () => {
+    const workspace = new Doc();
+    workspace.getMap<string>('resource-references').set('legacy-board', JSON.stringify({ id: 'legacy-board', type: 'board' }));
+    workspace.getArray<string>('resource-order').push(['legacy-board']);
+
+    const view = new Doc();
+    const resource = view.getMap<unknown>('resource');
+    resource.set('type', 'board');
+    resource.set('title', 'Legacy board');
+    resource.set('statusPropertyId', 'status');
+    const pageIds = new YArray<string>();
+    pageIds.push(['page-1']);
+    resource.set('pageIds', pageIds);
+    const propertyIds = new YArray<string>();
+    propertyIds.push(['status']);
+    resource.set('propertyIds', propertyIds);
+
+    const persisted = new Map<string, Doc>([
+      ['workspace:notion-pages-lab', workspace],
+      ['view:legacy-board', view],
+    ]);
+    const store = createStore(undefined, persisted);
+    store.initialize({ schema, pages: [page] });
+
+    expect(store.read().resources?.find((item) => item.id === 'legacy-board')).toMatchObject({
+      databaseId: 'db-legacy-board',
+      pageIds: ['page-1'],
+      propertyIds: ['status'],
+      statusPropertyId: 'status',
+    });
   });
 
   it('opens independent workspace, database and view rooms', () => {
