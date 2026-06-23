@@ -36,10 +36,23 @@ function BoardCardDnd({ pageId, statusId, dragging, renderCard, after }: { pageI
   </div>;
 }
 
+function isCurrentResource(resource: unknown): resource is WorkspaceResource {
+  if (!resource || typeof resource !== 'object') return false;
+  const candidate = resource as Partial<WorkspaceResource>;
+  if (typeof candidate.id !== 'string' || typeof candidate.title !== 'string'
+    || !Array.isArray(candidate.pageIds) || !Array.isArray(candidate.propertyIds)) return false;
+  if (candidate.type === 'board') return typeof candidate.statusPropertyId === 'string';
+  return candidate.type === 'calendar' && typeof candidate.datePropertyId === 'string';
+}
+
 function loadState(): { schema: NotionSchema; pages: NotionPageData[]; resources?: WorkspaceResource[] } {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored) as { schema: NotionSchema; pages: NotionPageData[]; resources?: WorkspaceResource[] };
+    if (stored) {
+      const parsed = JSON.parse(stored) as { schema: NotionSchema; pages: NotionPageData[]; resources?: unknown[] };
+      const resources = parsed.resources?.filter(isCurrentResource);
+      return { schema: parsed.schema, pages: parsed.pages, resources: resources?.length ? resources : undefined };
+    }
   } catch { /* use seed */ }
   return { schema: structuredClone(sampleSchema), pages: structuredClone(samplePages) };
 }
