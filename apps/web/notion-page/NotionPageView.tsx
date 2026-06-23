@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { SerializedEditorState } from 'lexical';
-import type { CollabConfig, NotionPageData, NotionSchema, PersonOption, StoredPropertyValue } from './types';
+import type { BoardLinkOption, BoardLinkValue, CollabConfig, NotionPageData, NotionSchema, PersonOption, StoredPropertyValue } from './types';
 import { PageHeader } from './PageHeader';
 import { PropertiesPanel } from './PropertiesPanel';
 import { NotionEditor } from './editor/NotionEditor';
@@ -20,6 +20,9 @@ interface NotionPageViewProps {
   onPropertyChange?: (propertyId: string, value: StoredPropertyValue) => void;
   onContentChange?: (content: SerializedEditorState) => void;
   onSchemaChange?: (schema: NotionSchema) => void;
+  boardOptions?: BoardLinkOption[];
+  boardPlacement?: BoardLinkValue | null;
+  onBoardPlacementChange?: (placement: BoardLinkValue | null) => void;
   onEditingLocationChange?: (location: string) => void;
 }
 
@@ -40,6 +43,7 @@ export function NotionPageView({
   schema, page, locale, collab,
   onTitleChange, onIconChange, onCoverChange, onCoverPositionChange,
   onPropertyChange, onContentChange, onSchemaChange,
+  boardOptions, boardPlacement, onBoardPlacementChange,
   onEditingLocationChange,
 }: NotionPageViewProps) {
   const [fullWidth, setFullWidth] = useState(false);
@@ -106,6 +110,9 @@ export function NotionPageView({
           locale={locale}
           onChange={onPropertyChange}
           onSchemaChange={onSchemaChange}
+          boardOptions={boardOptions}
+          boardPlacement={boardPlacement}
+          onBoardPlacementChange={onBoardPlacementChange}
         />
         <div className="npc-page-divider" />
         <NotionEditor
