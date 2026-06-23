@@ -309,9 +309,14 @@ export class WorkspaceYjsStore {
       .filter((resource): resource is WorkspaceResource => Boolean(resource)) ?? [];
     const references = this.readReferences();
     const resources = references.flatMap((reference) => {
-      const fallback = seedResources.find((resource) => resource.id === reference.id)
+      const seedFallback = seedResources.find((resource) => resource.id === reference.id)
         ?? defaultResources(legacyState.schema, legacyState.pages).find((resource) => resource.type === reference.type)
         ?? this.fallbackResource(reference, legacyState.schema);
+      const fallback = {
+        ...seedFallback,
+        id: reference.id,
+        databaseId: reference.databaseId || inferredDatabaseId(reference),
+      } as WorkspaceResource;
       const room = this.ensureResourceRoom(fallback);
       const stored = readStoredResource(reference.id, room.resource, reference.databaseId || inferredDatabaseId(reference));
       return stored ? [{ ...stored, databaseId: reference.databaseId || inferredDatabaseId(reference) } as WorkspaceResource] : [];
