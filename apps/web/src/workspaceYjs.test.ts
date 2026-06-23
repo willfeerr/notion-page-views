@@ -74,6 +74,23 @@ describe('WorkspaceYjsStore', () => {
     expect(store.read().resources?.every((resource) => !resource.pageIds.includes('independent'))).toBe(true);
   });
 
+  it('moves a standalone page into a board database and back', () => {
+    const store = createStore();
+    store.initialize({ schema, pages: [page] });
+    store.insertPage({ ...page, id: 'standalone', properties: {} });
+    store.linkPage('board-roadmap', 'standalone');
+    store.updateProperty('standalone', 'status', 'todo');
+
+    let state = store.read();
+    expect(state.resources?.find((resource) => resource.id === 'board-roadmap')?.pageIds).toContain('standalone');
+    expect(state.pages.find((item) => item.id === 'standalone')?.properties.status).toBe('todo');
+
+    store.unlinkPage('board-roadmap', 'standalone');
+    state = store.read();
+    expect(state.resources?.find((resource) => resource.id === 'board-roadmap')?.pageIds).not.toContain('standalone');
+    expect(state.pages.find((item) => item.id === 'standalone')?.properties).toEqual({});
+  });
+
   it('keeps pages and schemas isolated between newly created databases', () => {
     const store = createStore();
     store.initialize({ schema, pages: [page] });
