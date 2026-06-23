@@ -6,7 +6,7 @@ import type { SerializedEditorState } from 'lexical';
 import { NotionEditor, NotionPageCard, NotionPageView } from '../notion-page';
 import { PropertiesPanel } from '../notion-page/PropertiesPanel';
 import { samplePages, sampleSchema } from '../notion-page/example/sampleData';
-import type { CollabPresence, NotionPageData, NotionSchema, StoredPropertyValue } from '../notion-page/types';
+import type { BoardLinkOption, BoardLinkValue, CollabPresence, NotionPageData, NotionSchema, StoredPropertyValue } from '../notion-page/types';
 import { BroadcastProvider } from '../notion-page/editor/BroadcastProvider';
 import { CalendarView } from './CalendarView';
 import { WorkspaceYjsStore } from './workspaceYjs';
@@ -133,7 +133,29 @@ export default function App() {
   const openPageResource = openPage
     ? resources.find((resource) => resource.pageIds.includes(openPage.id))
     : undefined;
+  const openPageBoard = openPage
+    ? resources.find((resource): resource is BoardResource => resource.type === 'board' && resource.pageIds.includes(openPage.id))
+    : undefined;
   const openPageSchema = openPageResource ? schemaForResource(schema, openPageResource) : { properties: [] };
+  const boardOptions: BoardLinkOption[] = resources.flatMap((resource) => {
+    if (resource.type !== 'board') return [];
+    const grouping = schema.properties.find((property) => property.id === resource.statusPropertyId && property.type === 'status');
+    if (!grouping || grouping.type !== 'status') return [];
+    return [{
+      id: resource.id,
+      databaseId: resource.databaseId,
+      title: resource.title,
+      lanes: grouping.options.map((option) => ({ id: option.id, name: option.name, color: option.color })),
+    }];
+  });
+  const boardPlacement: BoardLinkValue | null = openPage && openPageBoard
+    ? {
+        boardId: openPageBoard.id,
+        laneId: typeof openPage.properties[openPageBoard.statusPropertyId] === 'string'
+          ? openPage.properties[openPageBoard.statusPropertyId] as string
+          : null,
+      }
+    : null;
   const statusDefinition = activeResource?.type === 'board'
     ? schema.properties.find((property) => property.id === activeResource.statusPropertyId && property.type === 'status')
     : undefined;
@@ -174,6 +196,25 @@ export default function App() {
   function updateProperty(pageId: string, propertyId: string, value: StoredPropertyValue) {
     if (!pages.some((item) => item.id === pageId)) return;
     workspaceStoreRef.current?.updateProperty(pageId, propertyId, value);
+  }
+
+  function updateBoardPlacement(placement: BoardLinkValue | null) {
+    if (!openPage) return;
+    if (!placement) {
+      if (!openPageBoard) return;
+      if (!confirm('Remover esta pagina do database do board? As propriedades desse database serao removidas.')) return;
+      workspaceStoreRef.current?.unlinkPage(openPageBoard.id, openPage.id);
+      return;
+    }
+
+    const target = resources.find((resource): resource is BoardResource => resource.type === 'board' && resource.id === placement.boardId);
+    if (!target || !placement.laneId) return;
+    if (openPageResource && openPageResource.databaseId !== target.databaseId) {
+      if (!confirm('Esta pagina pertence a outro database. Mover para o database deste board?')) return;
+    }
+    if (openPageResource?.databaseId !== target.databaseId) workspaceStoreRef.current?.linkPage(target.id, openPage.id);
+    workspaceStoreRef.current?.updateProperty(openPage.id, target.statusPropertyId, placement.laneId);
+    setActiveResourceId(target.id);
   }
 
   function updateSchema(
@@ -578,6 +619,9 @@ export default function App() {
               onPropertyChange={(propertyId, value) => updateProperty(openPage.id, propertyId, value)}
               onContentChange={(content: SerializedEditorState) => updatePage(openPage.id, { content })}
               onSchemaChange={openPageResource ? (next) => updateSchema(next, {}, openPageResource) : undefined}
+              boardOptions={boardOptions}
+              boardPlacement={boardPlacement}
+              onBoardPlacementChange={updateBoardPlacement}
               onEditingLocationChange={setEditingLocation}
             />
           </section>
