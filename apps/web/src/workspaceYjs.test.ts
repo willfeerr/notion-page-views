@@ -50,7 +50,7 @@ describe('WorkspaceYjsStore', () => {
       options: [{ id: 'new-todo', name: 'Todo', color: 'gray' }], groups: [],
     };
     store.createResource({
-      id: 'board-new', type: 'board', title: 'New board', pageIds: [],
+      id: 'board-new', databaseId: 'database-new', type: 'board', title: 'New board', pageIds: [],
       propertyIds: [boardStatus.id], statusPropertyId: boardStatus.id,
     }, [boardStatus]);
 
@@ -58,7 +58,7 @@ describe('WorkspaceYjsStore', () => {
     const original = resources.find((resource) => resource.id === 'board-roadmap');
     const created = resources.find((resource) => resource.id === 'board-new');
     expect(created).toMatchObject({
-      pageIds: [], propertyIds: ['status-new-board'], statusPropertyId: 'status-new-board',
+      databaseId: 'database-new', pageIds: [], propertyIds: ['status-new-board'], statusPropertyId: 'status-new-board',
     });
     expect(original?.pageIds).toEqual(['page-1']);
     expect(original?.propertyIds).not.toContain('status-new-board');
@@ -71,12 +71,36 @@ describe('WorkspaceYjsStore', () => {
     expect(store.read().resources?.every((resource) => !resource.pageIds.includes('independent'))).toBe(true);
   });
 
+  it('keeps pages and schemas isolated between newly created databases', () => {
+    const store = createStore();
+    store.initialize({ schema, pages: [page] });
+    const isolatedStatus: NotionSchema['properties'][number] = {
+      id: 'isolated-status', name: 'Isolated status', type: 'status',
+      options: [{ id: 'isolated-todo', name: 'Todo', color: 'gray' }], groups: [],
+    };
+    store.createResource({
+      id: 'isolated-board', databaseId: 'isolated-db', type: 'board', title: 'Isolated',
+      pageIds: [], propertyIds: [isolatedStatus.id], statusPropertyId: isolatedStatus.id,
+    }, [isolatedStatus]);
+    store.insertPage({
+      ...page, id: 'isolated-page', properties: { [isolatedStatus.id]: 'isolated-todo' },
+    }, undefined, 'isolated-db');
+
+    const state = store.read();
+    const original = state.resources?.find((resource) => resource.id === 'board-roadmap');
+    const isolated = state.resources?.find((resource) => resource.id === 'isolated-board');
+    expect(original?.pageIds).toEqual(['page-1']);
+    expect(isolated?.pageIds).toEqual(['isolated-page']);
+    expect(original?.propertyIds).not.toContain(isolatedStatus.id);
+    expect(isolated?.propertyIds).toEqual([isolatedStatus.id]);
+  });
+
   it('opens independent workspace, database and view rooms', () => {
     const rooms: string[] = [];
     const store = createStore((room) => rooms.push(room));
     store.initialize({ schema, pages: [page] });
     expect(rooms).toContain('workspace:notion-pages-lab');
-    expect(rooms).toContain('database:roadmap');
+    expect(rooms).toContain('database:roadmap:v2');
     expect(rooms).toContain('view:board-roadmap');
     expect(rooms).toContain('view:calendar-product');
   });
