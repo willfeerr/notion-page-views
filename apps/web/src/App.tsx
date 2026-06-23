@@ -130,8 +130,11 @@ export default function App() {
   const openPage = pages.find((page) => page.id === openId) ?? pages[0] ?? null;
   const activeResource = resources.find((resource) => resource.id === activeResourceId);
   const activeSchema = useMemo(() => schemaForResource(schema, activeResource), [activeResource, schema]);
+  const openPageResource = openPage
+    ? resources.find((resource) => resource.pageIds.includes(openPage.id))
+    : undefined;
   const openPageIsInActiveResource = Boolean(openPage && activeResource?.pageIds.includes(openPage.id));
-  const openPageSchema = openPageIsInActiveResource ? activeSchema : schema;
+  const openPageSchema = openPageResource ? schemaForResource(schema, openPageResource) : { properties: [] };
   const statusDefinition = activeResource?.type === 'board'
     ? schema.properties.find((property) => property.id === activeResource.statusPropertyId && property.type === 'status')
     : undefined;
@@ -162,47 +165,31 @@ export default function App() {
   }
 
   function updateProperty(pageId: string, propertyId: string, value: StoredPropertyValue) {
-    const page = pages.find((item) => item.id === pageId);
-    if (!page) return;
+    if (!pages.some((item) => item.id === pageId)) return;
     workspaceStoreRef.current?.updateProperty(pageId, propertyId, value);
-    const definition = schema.properties.find((property) => property.id === propertyId);
-    if (definition?.type === 'date') {
-      resources.filter((resource) => resource.type === 'calendar' && resource.datePropertyId === propertyId).forEach((calendar) => {
-        if (value) workspaceStoreRef.current?.linkPage(calendar.id, pageId);
-        else workspaceStoreRef.current?.unlinkPage(calendar.id, pageId);
-      });
-    }
   }
 
-  function updateSchema(next: NotionSchema, fallbackByPropertyId: Record<string, StoredPropertyValue> = {}) {
-    if (!activeResource) return;
-    const activeIds = new Set(activeResource.propertyIds);
+  function updateSchema(
+    next: NotionSchema,
+    fallbackByPropertyId: Record<string, StoredPropertyValue> = {},
+    resource: WorkspaceResource | undefined = activeResource,
+  ) {
+    if (!resource) return;
     const resourceProperties = [...next.properties];
     let primaryPatch: Partial<WorkspaceResource> = {};
-    if (activeResource.type === 'board' && !resourceProperties.some((property) => property.id === activeResource.statusPropertyId && property.type === 'status')) {
-      const replacement = buildProperty('status', `${activeResource.title} Status`);
+    if (resource.type === 'board' && !resourceProperties.some((property) => property.id === resource.statusPropertyId && property.type === 'status')) {
+      const replacement = buildProperty('status', resource.title + ' Status');
       resourceProperties.push(replacement);
       primaryPatch = { statusPropertyId: replacement.id } as Partial<WorkspaceResource>;
     }
-    if (activeResource.type === 'calendar' && !resourceProperties.some((property) => property.id === activeResource.datePropertyId && property.type === 'date')) {
-      const replacement = buildProperty('date', `${activeResource.title} Data`);
+    if (resource.type === 'calendar' && !resourceProperties.some((property) => property.id === resource.datePropertyId && property.type === 'date')) {
+      const replacement = buildProperty('date', resource.title + ' Data');
       resourceProperties.push(replacement);
       primaryPatch = { datePropertyId: replacement.id } as Partial<WorkspaceResource>;
     }
-    const nextById = new Map(resourceProperties.map((property) => [property.id, property]));
-    const referencedElsewhere = new Set(resources.filter((resource) => resource.id !== activeResource.id).flatMap((resource) => resource.propertyIds));
-    const mergedProperties = schema.properties.flatMap((property) => {
-      const changed = nextById.get(property.id);
-      if (changed) {
-        nextById.delete(property.id);
-        return [changed];
-      }
-      if (activeIds.has(property.id) && !referencedElsewhere.has(property.id)) return [];
-      return [property];
-    });
-    const merged = { properties: [...mergedProperties, ...nextById.values()] };
-    workspaceStoreRef.current?.applySchema(merged, fallbackByPropertyId);
-    workspaceStoreRef.current?.updateResource(activeResource.id, {
+    const databaseSchema = { properties: resourceProperties };
+    workspaceStoreRef.current?.applySchema(resource.databaseId, databaseSchema, fallbackByPropertyId);
+    workspaceStoreRef.current?.updateResource(resource.id, {
       ...primaryPatch,
       propertyIds: resourceProperties.map((property) => property.id),
     } as Partial<WorkspaceResource>);
@@ -210,17 +197,21 @@ export default function App() {
 
   function createPage(statusId?: string, afterPageId?: string, resourceId?: string) {
     const now = new Date().toISOString();
-    const properties = Object.fromEntries(schema.properties.map((definition) => [definition.id, emptyValueFor(definition)]));
-    if (statusDefinition && statusId) properties[statusDefinition.id] = statusId;
-    for (const definition of schema.properties) {
+    const targetResource = resourceId ? resources.find((resource) => resource.id === resourceId) : undefined;
+    const targetSchema = targetResource ? schemaForResource(schema, targetResource) : { properties: [] };
+    const properties = Object.fromEntries(targetSchema.properties.map((definition) => [definition.id, emptyValueFor(definition)]));
+    if (targetResource?.type === 'board') {
+      const grouping = targetSchema.properties.find((definition) => definition.id === targetResource.statusPropertyId && definition.type === 'status');
+      if (grouping && statusId) properties[grouping.id] = statusId;
+    }
+    for (const definition of targetSchema.properties) {
       if (definition.type === 'created_time' || definition.type === 'last_edited_time') properties[definition.id] = now;
     }
     const page: NotionPageData = {
       id: crypto.randomUUID(), icon: '📄', coverUrl: null, title: 'Sem titulo', properties,
       content: null, createdTime: now, lastEditedTime: now,
     };
-    workspaceStoreRef.current?.insertPage(page, afterPageId);
-    if (resourceId) workspaceStoreRef.current?.linkPage(resourceId, page.id, afterPageId);
+    workspaceStoreRef.current?.insertPage(page, afterPageId, targetResource?.databaseId);
     setOpenId(page.id);
     setView('page');
   }
@@ -240,21 +231,20 @@ export default function App() {
     const nextStatus = schema.properties.find((property) => property.id === propertyId && property.type === 'status');
     if (!nextStatus || nextStatus.type !== 'status') return;
     workspaceStoreRef.current?.updateResource(activeResource.id, { statusPropertyId: nextStatus.id } as Partial<WorkspaceResource>);
-    const validOptions = new Set(nextStatus.options.map((option) => option.id));
-    const fallback = nextStatus.options[0]?.id;
-    if (!fallback) return;
-    activePages.forEach((page) => {
-      if (!validOptions.has(String(page.properties[nextStatus.id] ?? ''))) updateProperty(page.id, nextStatus.id, fallback);
-    });
   }
 
   function finishBoardCardDrag(event: DragEndEvent) {
     const pageId = event.active.data.current?.pageId as string | undefined;
     const statusId = event.over?.data.current?.statusId as string | undefined;
     const beforePageId = event.over?.data.current?.beforePageId as string | undefined;
-    if (pageId && statusId) {
-      movePage(pageId, statusId);
-      if (activeResource && beforePageId && beforePageId !== pageId) workspaceStoreRef.current?.reorderResourcePage(activeResource.id, pageId, beforePageId);
+    if (pageId && statusId && activeResource?.type === 'board' && statusDefinition) {
+      workspaceStoreRef.current?.moveBoardPage(
+        activeResource.id,
+        pageId,
+        statusDefinition.id,
+        statusId === '__unassigned__' ? null : statusId,
+        beforePageId,
+      );
     }
     setDraggingId(null);
   }
@@ -328,8 +318,11 @@ export default function App() {
       if (definition.type === 'created_time' || definition.type === 'last_edited_time') properties[definition.id] = now;
     }
     const page: NotionPageData = { id: crypto.randomUUID(), icon: '📅', coverUrl: null, title: 'Novo evento', properties, content: null, createdTime: now, lastEditedTime: now };
-    workspaceStoreRef.current?.insertPage(page);
-    if (activeResource?.type === 'calendar') workspaceStoreRef.current?.linkPage(activeResource.id, page.id);
+    workspaceStoreRef.current?.insertPage(
+      page,
+      undefined,
+      activeResource?.type === 'calendar' ? activeResource.databaseId : undefined,
+    );
     setOpenId(page.id);
     setView('page');
   }
@@ -345,11 +338,15 @@ export default function App() {
       ? schema.properties.find((property) => property.id === existingDatePropertyId && property.type === 'date')
       : undefined;
     const primary = existingDate ?? buildProperty(type === 'board' ? 'status' : 'date', type === 'board' ? `${title} Status` : `${title} Data`);
-    const propertyIds = [primary.id];
+    const owner = existingDate
+      ? resources.find((resource) => resource.propertyIds.includes(existingDate.id))
+      : undefined;
+    const propertyIds = owner?.propertyIds ?? [primary.id];
+    const databaseId = owner?.databaseId ?? createId('database');
     const id = createId(type);
     const resource: WorkspaceResource = type === 'board'
-      ? { id, type, title, pageIds: [], propertyIds, statusPropertyId: primary.id }
-      : { id, type, title, pageIds: [], propertyIds, datePropertyId: primary.id, timezone: 'America/Sao_Paulo', defaultView: 'month', visibleHours: { from: 7, to: 21 } };
+      ? { id, databaseId, type, title, pageIds: [], propertyIds, statusPropertyId: primary.id }
+      : { id, databaseId, type, title, pageIds: owner?.pageIds ?? [], propertyIds, datePropertyId: primary.id, timezone: 'America/Sao_Paulo', defaultView: 'month', visibleHours: { from: 7, to: 21 } };
     workspaceStoreRef.current?.createResource(resource, existingDate ? [] : [primary]);
     setActiveResourceId(resource.id);
     setView(type);
@@ -574,7 +571,7 @@ export default function App() {
               onCoverPositionChange={(coverPosition) => updatePage(openPage.id, { coverPosition })}
               onPropertyChange={(propertyId, value) => updateProperty(openPage.id, propertyId, value)}
               onContentChange={(content: SerializedEditorState) => updatePage(openPage.id, { content })}
-              onSchemaChange={openPageIsInActiveResource ? updateSchema : (next) => workspaceStoreRef.current?.applySchema(next)}
+              onSchemaChange={openPageResource ? (next) => updateSchema(next, {}, openPageResource) : undefined}
               onEditingLocationChange={setEditingLocation}
             />
           </section>
