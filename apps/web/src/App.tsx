@@ -128,7 +128,7 @@ export default function App() {
   }, [initial]);
 
   const openPage = pages.find((page) => page.id === openId) ?? pages[0] ?? null;
-  const activeResource = resources.find((resource) => resource.id === activeResourceId) ?? resources[0];
+  const activeResource = resources.find((resource) => resource.id === activeResourceId);
   const activeSchema = useMemo(() => schemaForResource(schema, activeResource), [activeResource, schema]);
   const openPageIsInActiveResource = Boolean(openPage && activeResource?.pageIds.includes(openPage.id));
   const openPageSchema = openPageIsInActiveResource ? activeSchema : schema;
@@ -136,7 +136,8 @@ export default function App() {
     ? schema.properties.find((property) => property.id === activeResource.statusPropertyId && property.type === 'status')
     : undefined;
   const statusOptions = statusDefinition?.type === 'status' ? statusDefinition.options : [];
-  const boardVisiblePropertyIds = activeSchema.properties.filter((property) => property.id !== statusDefinition?.id).slice(0, 4).map((property) => property.id);
+  const boardStatusDefinitions = activeSchema.properties.filter((property) => property.type === 'status');
+  const boardVisiblePropertyIds = activeSchema.properties.slice(0, 4).map((property) => property.id);
   const draggingPage = draggingId ? pages.find((page) => page.id === draggingId) ?? null : null;
   const visiblePages = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('pt-BR');
@@ -232,6 +233,19 @@ export default function App() {
   function movePage(pageId: string, statusId: string) {
     if (!statusDefinition) return;
     updateProperty(pageId, statusDefinition.id, statusId);
+  }
+
+  function changeBoardGrouping(propertyId: string) {
+    if (activeResource?.type !== 'board') return;
+    const nextStatus = schema.properties.find((property) => property.id === propertyId && property.type === 'status');
+    if (!nextStatus || nextStatus.type !== 'status') return;
+    workspaceStoreRef.current?.updateResource(activeResource.id, { statusPropertyId: nextStatus.id } as Partial<WorkspaceResource>);
+    const validOptions = new Set(nextStatus.options.map((option) => option.id));
+    const fallback = nextStatus.options[0]?.id;
+    if (!fallback) return;
+    activePages.forEach((page) => {
+      if (!validOptions.has(String(page.properties[nextStatus.id] ?? ''))) updateProperty(page.id, nextStatus.id, fallback);
+    });
   }
 
   function finishBoardCardDrag(event: DragEndEvent) {
@@ -453,7 +467,20 @@ export default function App() {
 
         {view === 'board' && (
           <section className="lab-board-view">
-            <div className="lab-heading"><div><span>BOARD</span><h1>{activeResource?.type === 'board' ? activeResource.title : 'Board'}</h1></div><button onClick={() => createBoardPage()}><Plus size={15} />Novo card</button></div>
+            <div className="lab-heading">
+              <div><span>BOARD</span><h1>{activeResource?.type === 'board' ? activeResource.title : 'Board'}</h1></div>
+              <div className="lab-board-actions">
+                {activeResource?.type === 'board' && boardStatusDefinitions.length ? (
+                  <label className="lab-board-grouping">
+                    <span>Agrupar por</span>
+                    <select value={activeResource.statusPropertyId} onChange={(event) => changeBoardGrouping(event.target.value)}>
+                      {boardStatusDefinitions.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}
+                    </select>
+                  </label>
+                ) : null}
+                <button onClick={() => createBoardPage()}><Plus size={15} />Novo card</button>
+              </div>
+            </div>
             <DndContext sensors={boardSensors} onDragStart={(event) => { const pageId = event.active.data.current?.pageId; setDraggingId(typeof pageId === 'string' ? pageId : null); }} onDragCancel={() => setDraggingId(null)} onDragEnd={finishBoardCardDrag}>
             <div className="lab-board">
               {statusOptions.map((status) => {
