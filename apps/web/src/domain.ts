@@ -126,7 +126,7 @@ export function convertPropertyValue(
 }
 
 export function schemaForResource(schema: NotionSchema, resource?: WorkspaceResource): NotionSchema {
-  if (!resource?.propertyIds.length) return schema;
+  if (!resource?.propertyIds?.length) return schema;
   const ids = new Set(resource.propertyIds);
   return { properties: schema.properties.filter((property) => ids.has(property.id)) };
 }
