@@ -133,7 +133,6 @@ export default function App() {
   const openPageResource = openPage
     ? resources.find((resource) => resource.pageIds.includes(openPage.id))
     : undefined;
-  const openPageIsInActiveResource = Boolean(openPage && activeResource?.pageIds.includes(openPage.id));
   const openPageSchema = openPageResource ? schemaForResource(schema, openPageResource) : { properties: [] };
   const statusDefinition = activeResource?.type === 'board'
     ? schema.properties.find((property) => property.id === activeResource.statusPropertyId && property.type === 'status')
@@ -151,6 +150,14 @@ export default function App() {
     const byId = new Map(visiblePages.map((page) => [page.id, page]));
     return activeResource.pageIds.map((id) => byId.get(id)).filter((page): page is NotionPageData => Boolean(page));
   }, [activeResource, visiblePages]);
+  const validStatusIds = new Set(statusOptions.map((status) => status.id));
+  const hasUnassignedPages = Boolean(statusDefinition && activePages.some((page) => {
+    const value = page.properties[statusDefinition.id];
+    return typeof value !== 'string' || !validStatusIds.has(value);
+  }));
+  const boardLanes = hasUnassignedPages
+    ? [...statusOptions, { id: '__unassigned__', name: 'Sem status', color: 'gray' as const }]
+    : statusOptions;
 
   function updatePage(id: string, patch: Partial<NotionPageData>) {
     const now = new Date().toISOString();
@@ -202,7 +209,7 @@ export default function App() {
     const properties = Object.fromEntries(targetSchema.properties.map((definition) => [definition.id, emptyValueFor(definition)]));
     if (targetResource?.type === 'board') {
       const grouping = targetSchema.properties.find((definition) => definition.id === targetResource.statusPropertyId && definition.type === 'status');
-      if (grouping && statusId) properties[grouping.id] = statusId;
+      if (grouping && statusId && statusId !== '__unassigned__') properties[grouping.id] = statusId;
     }
     for (const definition of targetSchema.properties) {
       if (definition.type === 'created_time' || definition.type === 'last_edited_time') properties[definition.id] = now;
@@ -219,11 +226,6 @@ export default function App() {
   function createBoardPage(statusId = statusOptions[0]?.id, afterPageId?: string) {
     if (activeResource?.type !== 'board') return;
     createPage(statusId, afterPageId, activeResource.id);
-  }
-
-  function movePage(pageId: string, statusId: string) {
-    if (!statusDefinition) return;
-    updateProperty(pageId, statusDefinition.id, statusId);
   }
 
   function changeBoardGrouping(propertyId: string) {
@@ -311,10 +313,10 @@ export default function App() {
   function createCalendarPage(datePropertyId: string, start: string, end?: string) {
     const statusId = statusOptions[0]?.id;
     const now = new Date().toISOString();
-    const properties = Object.fromEntries(schema.properties.map((definition) => [definition.id, emptyValueFor(definition)]));
+    const properties = Object.fromEntries(activeSchema.properties.map((definition) => [definition.id, emptyValueFor(definition)]));
     properties[datePropertyId] = normalizeDateValue({ start, end: end ?? start, allDay: start.length <= 10 }, activeResource?.type === 'calendar' ? activeResource.timezone : undefined);
     if (statusDefinition && statusId) properties[statusDefinition.id] = statusId;
-    for (const definition of schema.properties) {
+    for (const definition of activeSchema.properties) {
       if (definition.type === 'created_time' || definition.type === 'last_edited_time') properties[definition.id] = now;
     }
     const page: NotionPageData = { id: crypto.randomUUID(), icon: '📅', coverUrl: null, title: 'Novo evento', properties, content: null, createdTime: now, lastEditedTime: now };
@@ -480,11 +482,15 @@ export default function App() {
             </div>
             <DndContext sensors={boardSensors} onDragStart={(event) => { const pageId = event.active.data.current?.pageId; setDraggingId(typeof pageId === 'string' ? pageId : null); }} onDragCancel={() => setDraggingId(null)} onDragEnd={finishBoardCardDrag}>
             <div className="lab-board">
-              {statusOptions.map((status) => {
-                const columnPages = activePages.filter((page) => page.properties[statusDefinition?.id ?? 'status'] === status.id);
+              {boardLanes.map((status) => {
+                const isUnassigned = status.id === '__unassigned__';
+                const columnPages = activePages.filter((page) => {
+                  const value = page.properties[statusDefinition?.id ?? 'status'];
+                  return isUnassigned ? typeof value !== 'string' || !validStatusIds.has(value) : value === status.id;
+                });
                 return (
                   <BoardLaneDrop key={status.id} statusId={status.id} onLaneDrop={() => reorderLane(status.id)}>
-                    <header draggable onDragStart={() => setDraggingLaneId(status.id)} onDragEnd={() => setDraggingLaneId(null)}>
+                    <header draggable={!isUnassigned} onDragStart={() => { if (!isUnassigned) setDraggingLaneId(status.id); }} onDragEnd={() => setDraggingLaneId(null)}>
                       <GripVertical size={13} className="lab-lane-grip" />
                       <i data-color={status.color} />
                       {editingLaneId === status.id ? (
@@ -499,10 +505,10 @@ export default function App() {
                             if (event.key === 'Escape') setEditingLaneId(null);
                           }}
                         />
-                      ) : <button className="lab-lane-title" type="button" title="Renomear lane" onClick={() => setEditingLaneId(status.id)}>{status.name}</button>}
+                      ) : <button className="lab-lane-title" type="button" title={isUnassigned ? 'Paginas sem valor nesta propriedade' : 'Renomear lane'} onClick={() => { if (!isUnassigned) setEditingLaneId(status.id); }}>{status.name}</button>}
                       <b>{columnPages.length}</b>
                       <button type="button" title="Adicionar card" onClick={() => createBoardPage(status.id)}><Plus size={14} /></button>
-                      <button type="button" title="Excluir lane" disabled={statusOptions.length <= 1} onClick={() => deleteLane(status.id)}><Trash2 size={13} /></button>
+                      <button type="button" title="Excluir lane" disabled={isUnassigned || statusOptions.length <= 1} onClick={() => deleteLane(status.id)}><Trash2 size={13} /></button>
                     </header>
                     <div className="lab-card-list">
                       {columnPages.map((page) => (
