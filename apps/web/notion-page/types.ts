@@ -63,6 +63,25 @@ export interface NotionSchema {
   properties: PropertyDefinition[];
 }
 
+export interface BoardLinkLane {
+  id: string;
+  name: string;
+  color: PropertyColor;
+}
+
+export interface BoardLinkOption {
+  id: string;
+  databaseId: string;
+  title: string;
+  lanes: BoardLinkLane[];
+}
+
+export interface BoardLinkValue {
+  boardId: string;
+  laneId: string | null;
+}
+
+
 /**
  * Config for Hocuspocus real-time collaboration.
  * When provided, the editor uses LexicalCollaborationPlugin
