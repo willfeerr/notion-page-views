@@ -7,8 +7,11 @@ export const DEFAULT_TIMEZONE = 'America/Sao_Paulo';
 
 export interface ResourceBase {
   id: string;
+  databaseId: string;
   title: string;
+  /** Derived from the database membership; never persisted by a view. */
   pageIds: string[];
+  /** Properties visible in this view. */
   propertyIds: string[];
 }
 
