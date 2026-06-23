@@ -71,6 +71,7 @@ export default function App() {
   const [schema, setSchema] = useState(initial.schema);
   const [pages, setPages] = useState(initial.pages);
   const [resources, setResources] = useState<WorkspaceResource[]>(initial.resources ?? []);
+  const [pageSchemas, setPageSchemas] = useState<Record<string, NotionSchema>>({});
   const [view, setView] = useState<View>('board');
   const [activeResourceId, setActiveResourceId] = useState('board-roadmap');
   const [creatingType, setCreatingType] = useState<WorkspaceResource['type'] | null>(null);
@@ -118,6 +119,7 @@ export default function App() {
       setSchema(state.schema);
       setPages(state.pages);
       setResources(state.resources ?? []);
+      setPageSchemas(state.pageSchemas ?? {});
     });
 
     return () => {
@@ -136,7 +138,9 @@ export default function App() {
   const openPageBoard = openPage
     ? resources.find((resource): resource is BoardResource => resource.type === 'board' && resource.pageIds.includes(openPage.id))
     : undefined;
-  const openPageSchema = openPageResource ? schemaForResource(schema, openPageResource) : { properties: [] };
+  const openPageSchema = openPageResource
+    ? schemaForResource(schema, openPageResource)
+    : openPage ? pageSchemas[openPage.id] ?? { properties: [] } : { properties: [] };
   const boardOptions: BoardLinkOption[] = resources.flatMap((resource) => {
     if (resource.type !== 'board') return [];
     const grouping = schema.properties.find((property) => property.id === resource.statusPropertyId && property.type === 'status');
@@ -618,7 +622,9 @@ export default function App() {
               onCoverPositionChange={(coverPosition) => updatePage(openPage.id, { coverPosition })}
               onPropertyChange={(propertyId, value) => updateProperty(openPage.id, propertyId, value)}
               onContentChange={(content: SerializedEditorState) => updatePage(openPage.id, { content })}
-              onSchemaChange={openPageResource ? (next) => updateSchema(next, {}, openPageResource) : undefined}
+              onSchemaChange={openPageResource
+                ? (next) => updateSchema(next, {}, openPageResource)
+                : (next) => workspaceStoreRef.current?.applyPageSchema(openPage.id, next)}
               boardOptions={boardOptions}
               boardPlacement={boardPlacement}
               onBoardPlacementChange={updateBoardPlacement}
