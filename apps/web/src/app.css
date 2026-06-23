@@ -109,8 +109,10 @@ button { cursor: pointer; }
 .lab-card-slot { position: relative; z-index: 1; }
 .lab-card-slot:hover, .lab-card-slot:focus-within { z-index: 20; }
 .lab-card-slot > div:first-child { transition: opacity .12s, transform .12s; }
-.lab-card-slot > div:first-child.is-dragging { opacity: .35; transform: rotate(1deg); }
+.lab-card-slot > div:first-child.is-dragging { opacity: .18; transform: none; }
 .lab-board-card-drag { -webkit-touch-callout: none; }
+.lab-drag-overlay { width: 240px; pointer-events: none; cursor: grabbing; transform: rotate(1deg); }
+.lab-drag-overlay .npc-card { box-shadow: 0 18px 42px rgba(0, 0, 0, .24); }
 .lab-insert-row { height: 6px; display: flex; align-items: center; opacity: 0; transition: opacity .12s; }
 .lab-card-slot:hover .lab-insert-row, .lab-insert-row:focus-within { opacity: 1; }
 .lab-insert-row span { height: 1px; flex: 1; background: var(--sk-border); }
