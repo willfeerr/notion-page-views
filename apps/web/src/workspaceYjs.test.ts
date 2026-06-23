@@ -74,6 +74,23 @@ describe('WorkspaceYjsStore', () => {
     expect(store.read().resources?.every((resource) => !resource.pageIds.includes('independent'))).toBe(true);
   });
 
+  it('gives standalone pages private schemas without leaking properties', () => {
+    const store = createStore();
+    store.initialize({ schema, pages: [page] });
+    store.insertPage({ ...page, id: 'private-a', properties: {} });
+    store.insertPage({ ...page, id: 'private-b', properties: {} });
+    const privateSchema: NotionSchema = {
+      properties: [{ id: 'private-note', name: 'Note', type: 'text' }],
+    };
+    store.applyPageSchema('private-a', privateSchema);
+
+    const state = store.read();
+    expect(state.pageSchemas?.['private-a']).toEqual(privateSchema);
+    expect(state.pageSchemas?.['private-b']).toEqual({ properties: [] });
+    expect(state.pages.find((item) => item.id === 'private-a')?.properties).toHaveProperty('private-note');
+    expect(state.pages.find((item) => item.id === 'private-b')?.properties).not.toHaveProperty('private-note');
+  });
+
   it('moves a standalone page into a board database and back', () => {
     const store = createStore();
     store.initialize({ schema, pages: [page] });
@@ -88,7 +105,7 @@ describe('WorkspaceYjsStore', () => {
     store.unlinkPage('board-roadmap', 'standalone');
     state = store.read();
     expect(state.resources?.find((resource) => resource.id === 'board-roadmap')?.pageIds).not.toContain('standalone');
-    expect(state.pages.find((item) => item.id === 'standalone')?.properties).toEqual({});
+    expect(state.pages.find((item) => item.id === 'standalone')?.properties.status).toBe('todo');
   });
 
   it('keeps pages and schemas isolated between newly created databases', () => {
