@@ -28,7 +28,7 @@ describe('WorkspaceYjsStore', () => {
     store.initialize({ schema, pages: [page] });
     let changes = 0;
     const unsubscribe = store.subscribe(() => { changes += 1; });
-    store.applySchema({ ...schema, properties: schema.properties.map((property) => property.id === 'score' ? { id: 'score', name: 'Score', type: 'number' } : property) });
+    store.applySchema('roadmap', { ...schema, properties: schema.properties.map((property) => property.id === 'score' ? { id: 'score', name: 'Score', type: 'number' } : property) });
     expect(store.read().pages[0].properties.score).toBe(42);
     expect(changes).toBeGreaterThanOrEqual(2);
     unsubscribe();
