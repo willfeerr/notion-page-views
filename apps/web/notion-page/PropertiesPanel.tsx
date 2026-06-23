@@ -12,10 +12,10 @@ import {
 import { CSS as DndCSS } from '@dnd-kit/utilities';
 import {
   Plus, ChevronDown, ChevronUp, MoreHorizontal,
-  Trash2, Edit3, GripVertical, ArrowRight,
+  Trash2, Edit3, GripVertical, ArrowRight, LayoutDashboard, X,
 } from 'lucide-react';
 import type {
-  NotionSchema, PageProperties, PropertyDefinition,
+  BoardLinkOption, BoardLinkValue, NotionSchema, PageProperties, PropertyDefinition,
   PersonOption, PropertyType, SelectOption, StoredPropertyValue,
 } from './types';
 import { PROPERTY_ICONS, PROPERTY_TYPE_LABELS } from './propertyTokens';
@@ -28,6 +28,9 @@ interface PropertiesPanelProps {
   locale?: string;
   onChange?: (propertyId: string, next: StoredPropertyValue) => void;
   onSchemaChange?: (schema: NotionSchema) => void;
+  boardOptions?: BoardLinkOption[];
+  boardPlacement?: BoardLinkValue | null;
+  onBoardPlacementChange?: (placement: BoardLinkValue | null) => void;
   // schema passed here for context (not used directly — parent owns state)
 }
 
@@ -227,11 +230,19 @@ function SortablePropertyRow({
 // ─── Main panel ────────────────────────────────────────────────
 export function PropertiesPanel({
   schema, properties, locale, onChange, onSchemaChange,
+  boardOptions = [], boardPlacement, onBoardPlacementChange,
 }: PropertiesPanelProps) {
   const [showHidden, setShowHidden] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
+  const [editingBoardLink, setEditingBoardLink] = useState(false);
+  const [draftBoardId, setDraftBoardId] = useState(boardPlacement?.boardId ?? boardOptions[0]?.id ?? '');
+  const [draftLaneId, setDraftLaneId] = useState(boardPlacement?.laneId ?? '');
   const readOnly = !onSchemaChange;
+  const canManageBoardLink = Boolean(onBoardPlacementChange && boardOptions.length);
+  const placementBoard = boardOptions.find((board) => board.id === boardPlacement?.boardId);
+  const placementLane = placementBoard?.lanes.find((lane) => lane.id === boardPlacement?.laneId);
+  const draftBoard = boardOptions.find((board) => board.id === draftBoardId);
   const availablePeople = schema.properties.flatMap((property) => property.type === 'person' ? property.people : [])
     .filter((person, index, all) => all.findIndex((candidate) => candidate.id === person.id) === index);
 
@@ -239,6 +250,26 @@ export function PropertiesPanel({
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+
+  function openBoardLinkEditor() {
+    const boardId = boardPlacement?.boardId ?? boardOptions[0]?.id ?? '';
+    const board = boardOptions.find((candidate) => candidate.id === boardId);
+    setDraftBoardId(boardId);
+    setDraftLaneId(boardPlacement?.laneId ?? board?.lanes[0]?.id ?? '');
+    setEditingBoardLink(true);
+  }
+
+  function changeDraftBoard(boardId: string) {
+    const board = boardOptions.find((candidate) => candidate.id === boardId);
+    setDraftBoardId(boardId);
+    setDraftLaneId(board?.lanes[0]?.id ?? '');
+  }
+
+  function applyBoardLink() {
+    if (!onBoardPlacementChange || !draftBoardId || !draftLaneId) return;
+    onBoardPlacementChange({ boardId: draftBoardId, laneId: draftLaneId });
+    setEditingBoardLink(false);
+  }
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -387,6 +418,41 @@ export function PropertiesPanel({
         </SortableContext>
       </DndContext>
 
+      {(boardPlacement || editingBoardLink) && canManageBoardLink ? (
+        <div className="npc-board-link-row">
+          <div className="npc-board-link-label"><LayoutDashboard size={14} /><span>Board</span></div>
+          {editingBoardLink ? (
+            <div className="npc-board-link-editor">
+              <label>
+                <span>Board</span>
+                <select value={draftBoardId} onChange={(event) => changeDraftBoard(event.target.value)}>
+                  {boardOptions.map((board) => <option key={board.id} value={board.id}>{board.title}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Lane</span>
+                <select value={draftLaneId} onChange={(event) => setDraftLaneId(event.target.value)}>
+                  {draftBoard?.lanes.map((lane) => <option key={lane.id} value={lane.id}>{lane.name}</option>)}
+                </select>
+              </label>
+              <div className="npc-board-link-actions">
+                <button type="button" onClick={() => { setEditingBoardLink(false); if (!boardPlacement) setDraftBoardId(''); }}>Cancelar</button>
+                <button type="button" className="is-primary" disabled={!draftBoardId || !draftLaneId} onClick={applyBoardLink}>Aplicar</button>
+              </div>
+            </div>
+          ) : (
+            <div className="npc-board-link-value">
+              <button type="button" onClick={openBoardLinkEditor}>
+                <strong>{placementBoard?.title ?? 'Board'}</strong>
+                <span>/</span>
+                <em>{placementLane?.name ?? 'Sem status'}</em>
+              </button>
+              <button type="button" className="npc-board-link-remove" title="Remover do board" onClick={() => onBoardPlacementChange?.(null)}><X size={13} /></button>
+            </div>
+          )}
+        </div>
+      ) : null}
+
       {emptyPropertyCount > 0 && (
         <button type="button" className="npc-hidden-props-toggle"
           onClick={() => setShowHidden((v) => !v)}>
@@ -397,7 +463,7 @@ export function PropertiesPanel({
         </button>
       )}
 
-      {!readOnly && (
+      {(!readOnly || canManageBoardLink) && (
         <Popover
           align="left"
           trigger={({ toggle }) => (
@@ -408,16 +474,28 @@ export function PropertiesPanel({
         >
           {({ close }) => (
             <div className="npc-type-picker">
-              <div className="npc-type-picker-label">TIPO DE PROPRIEDADE</div>
-              {ADDABLE_TYPES.map((type) => {
-                const Icon = PROPERTY_ICONS[type];
-                return (
-                  <button key={type} type="button" className="npc-type-picker-item"
-                    onClick={() => { addProperty(type); close(); }}>
-                    <Icon size={14} strokeWidth={1.75} />{PROPERTY_TYPE_LABELS[type]}
+              {!readOnly ? (
+                <>
+                  <div className="npc-type-picker-label">TIPO DE PROPRIEDADE</div>
+                  {ADDABLE_TYPES.map((type) => {
+                    const Icon = PROPERTY_ICONS[type];
+                    return (
+                      <button key={type} type="button" className="npc-type-picker-item"
+                        onClick={() => { addProperty(type); close(); }}>
+                        <Icon size={14} strokeWidth={1.75} />{PROPERTY_TYPE_LABELS[type]}
+                      </button>
+                    );
+                  })}
+                </>
+              ) : null}
+              {canManageBoardLink ? (
+                <>
+                  <div className="npc-type-picker-label npc-type-picker-section">VINCULOS</div>
+                  <button type="button" className="npc-type-picker-item" onClick={() => { openBoardLinkEditor(); close(); }}>
+                    <LayoutDashboard size={14} strokeWidth={1.75} />Board
                   </button>
-                );
-              })}
+                </>
+              ) : null}
             </div>
           )}
         </Popover>
