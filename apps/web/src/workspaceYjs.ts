@@ -636,7 +636,7 @@ export class WorkspaceYjsStore {
     room.document.transact(() => this.writePageRank(room, resourceId, pageId, overPageId), 'resource-reorder-page');
   }
 
-  moveBoardPage(resourceId: string, pageId: string, propertyId: string, statusId: string, beforePageId?: string): void {
+  moveBoardPage(resourceId: string, pageId: string, propertyId: string, statusId: StoredPropertyValue, beforePageId?: string): void {
     const reference = this.readReferences().find((item) => item.id === resourceId);
     const room = reference ? this.databaseRooms.get(reference.databaseId) : null;
     const page = room?.pages.get(pageId);
