@@ -5,6 +5,30 @@ import type {
 
 export const DEFAULT_TIMEZONE = 'America/Sao_Paulo';
 
+export type FilterOperator = 'equals' | 'not_equals' | 'contains' | 'is_empty' | 'is_not_empty'
+  | 'greater_than' | 'greater_than_or_equal' | 'less_than' | 'less_than_or_equal' | 'before' | 'after';
+
+export interface FilterCondition {
+  type: 'condition';
+  propertyId: string;
+  operator: FilterOperator;
+  value?: StoredPropertyValue;
+}
+
+export interface FilterGroup {
+  type: 'group';
+  operator: 'and' | 'or';
+  filters: Array<FilterCondition | FilterGroup>;
+}
+
+export interface SortDefinition { propertyId: string; direction: 'ascending' | 'descending'; }
+export interface GroupDefinition { propertyId: string; direction?: 'ascending' | 'descending'; }
+export interface ViewProjection {
+  propertyIds: string[];
+  openMode: 'side_peek' | 'center_peek' | 'full_page';
+  cardPreview: 'none' | 'content' | 'cover';
+}
+
 export interface ResourceBase {
   id: string;
   databaseId: string;
@@ -14,6 +38,11 @@ export interface ResourceBase {
   pageIds: string[];
   /** Properties visible in this view. */
   propertyIds: string[];
+  filter?: FilterGroup;
+  sorts?: SortDefinition[];
+  group?: GroupDefinition;
+  subgroup?: GroupDefinition;
+  projection?: ViewProjection;
 }
 
 export interface BoardResource extends ResourceBase {

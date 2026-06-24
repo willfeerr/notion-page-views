@@ -16,6 +16,7 @@ import {
   type BoardResource, type CalendarResource, type PageOwnership, type PropertyMapping, type WorkspaceResource,
 } from './domain';
 import { ROOM_NAMES } from './yjs/model';
+import { executeViewQuery } from './viewQuery';
 
 type View = 'board' | 'calendar' | 'page';
 
@@ -197,7 +198,8 @@ export default function App() {
   const activePages = useMemo(() => {
     if (!activeResource) return visiblePages;
     const byId = new Map(visiblePages.map((page) => [page.id, page]));
-    return activeResource.pageIds.map((id) => byId.get(id)).filter((page): page is NotionPageData => Boolean(page));
+    const rows = activeResource.pageIds.map((id) => byId.get(id)).filter((page): page is NotionPageData => Boolean(page));
+    return executeViewQuery(rows, activeResource);
   }, [activeResource, visiblePages]);
   const validStatusIds = new Set(statusOptions.map((status) => status.id));
   const hasUnassignedPages = Boolean(statusDefinition && activePages.some((page) => {
@@ -314,7 +316,10 @@ export default function App() {
     if (activeResource?.type !== 'board') return;
     const nextStatus = activeSchema.properties.find((property) => property.id === propertyId && property.type === 'status');
     if (!nextStatus || nextStatus.type !== 'status') return;
-    workspaceStoreRef.current?.updateResource(activeResource.id, { statusPropertyId: nextStatus.id } as Partial<WorkspaceResource>);
+    workspaceStoreRef.current?.updateResource(activeResource.id, {
+      statusPropertyId: nextStatus.id,
+      group: { propertyId: nextStatus.id },
+    } as Partial<WorkspaceResource>);
   }
 
   function finishBoardCardDrag(event: DragEndEvent) {
@@ -431,8 +436,8 @@ export default function App() {
     const dataSourceId = owner?.dataSourceId ?? createId('datasource');
     const id = createId(type);
     const resource: WorkspaceResource = type === 'board'
-      ? { id, databaseId, dataSourceId, type, title, pageIds: [], propertyIds, statusPropertyId: primary.id }
-      : { id, databaseId, dataSourceId, type, title, pageIds: owner?.pageIds ?? [], propertyIds, datePropertyId: primary.id, timezone: 'America/Sao_Paulo', defaultView: 'month', visibleHours: { from: 7, to: 21 } };
+      ? { id, databaseId, dataSourceId, type, title, pageIds: [], propertyIds, statusPropertyId: primary.id, group: { propertyId: primary.id }, projection: { propertyIds, openMode: 'full_page', cardPreview: 'content' } }
+      : { id, databaseId, dataSourceId, type, title, pageIds: owner?.pageIds ?? [], propertyIds, datePropertyId: primary.id, timezone: 'America/Sao_Paulo', defaultView: 'month', visibleHours: { from: 7, to: 21 }, projection: { propertyIds, openMode: 'full_page', cardPreview: 'none' } };
     workspaceStoreRef.current?.createResource(resource, initialDefinitions);
     setActiveResourceId(resource.id);
     setView(type);

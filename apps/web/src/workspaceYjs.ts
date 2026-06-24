@@ -109,12 +109,15 @@ function defaultResources(schema: NotionSchema, pages: NotionPageData[]): Worksp
   if (status) resources.push({
     id: 'board-roadmap', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'board', title: 'Roadmap de produto',
     pageIds: pages.map((page) => page.id), propertyIds, statusPropertyId: status.id,
+    group: { propertyId: status.id },
+    projection: { propertyIds: propertyIds.slice(0, 4), openMode: 'full_page', cardPreview: 'content' },
   });
   if (date) resources.push({
     id: 'calendar-product', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'calendar', title: 'Calendario de produto',
     pageIds: pages.filter((page) => hasDateValue(page.properties[date.id])).map((page) => page.id),
     propertyIds, datePropertyId: date.id, timezone: date.timezone || DEFAULT_TIMEZONE,
     defaultView: 'month', visibleHours: { from: 7, to: 21 },
+    projection: { propertyIds, openMode: 'full_page', cardPreview: 'none' },
   });
   return resources;
 }
@@ -147,6 +150,10 @@ function writeResource(map: YMap<unknown>, resource: WorkspaceResource): void {
   const properties = propertyIds instanceof YArray ? propertyIds as YArray<string> : new YArray<string>();
   if (!(propertyIds instanceof YArray)) map.set('propertyIds', properties);
   replaceArray(properties, resource.propertyIds);
+  (['filter', 'sorts', 'group', 'subgroup', 'projection'] as const).forEach((field) => {
+    if (resource[field] === undefined) map.delete(field);
+    else map.set(field, JSON.stringify(resource[field]));
+  });
   if (resource.type === 'board') map.set('statusPropertyId', resource.statusPropertyId);
   else {
     map.set('datePropertyId', resource.datePropertyId);
@@ -168,6 +175,11 @@ function readStoredResource(id: string, map: YMap<unknown>, databaseId: string, 
     title: String(map.get('title') ?? 'Sem titulo'),
     pageIds: storedPages instanceof YArray ? storedPages.toArray() as string[] : [],
     propertyIds: storedProperties instanceof YArray ? storedProperties.toArray() as string[] : [],
+    filter: safeJson<WorkspaceResource['filter']>(map.get('filter') as string | undefined) ?? undefined,
+    sorts: safeJson<WorkspaceResource['sorts']>(map.get('sorts') as string | undefined) ?? undefined,
+    group: safeJson<WorkspaceResource['group']>(map.get('group') as string | undefined) ?? undefined,
+    subgroup: safeJson<WorkspaceResource['subgroup']>(map.get('subgroup') as string | undefined) ?? undefined,
+    projection: safeJson<WorkspaceResource['projection']>(map.get('projection') as string | undefined) ?? undefined,
   };
   if (type === 'board') {
     const statusPropertyId = map.get('statusPropertyId');
@@ -1083,7 +1095,10 @@ export class WorkspaceYjsStore {
         if (key === 'id' || key === 'type' || key === 'pageIds' || value === undefined) return;
         const current = room.resource.get(key);
         if (key === 'propertyIds' && current instanceof YArray && Array.isArray(value)) replaceArray(current, value as string[]);
-        else if (!valuesEqual(current, value)) room.resource.set(key, value);
+        else if (['filter', 'sorts', 'group', 'subgroup', 'projection'].includes(key)) {
+          const serialized = JSON.stringify(value);
+          if (current !== serialized) room.resource.set(key, serialized);
+        } else if (!valuesEqual(current, value)) room.resource.set(key, value);
       });
     }, 'resource-change');
   }

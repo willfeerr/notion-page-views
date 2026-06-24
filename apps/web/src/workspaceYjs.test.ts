@@ -340,6 +340,29 @@ describe('WorkspaceYjsStore', () => {
     expect(resources.find((item) => item.id === 'calendar-product')).toMatchObject({ defaultView: 'month' });
   });
 
+  it('persists generic filter, sort, grouping and projection per view', () => {
+    const persisted = new Map<string, Doc>();
+    const store = createStore(undefined, persisted);
+    store.initialize({ schema, pages: [page] });
+    store.updateResource('board-roadmap', {
+      filter: { type: 'group', operator: 'and', filters: [{ type: 'condition', propertyId: 'score', operator: 'is_not_empty' }] },
+      sorts: [{ propertyId: 'score', direction: 'descending' }],
+      group: { propertyId: 'status' },
+      subgroup: { propertyId: 'due' },
+      projection: { propertyIds: ['status', 'score'], openMode: 'side_peek', cardPreview: 'cover' },
+    });
+    store.destroy();
+
+    const restored = createStore(undefined, persisted);
+    restored.initialize({ schema, pages: [page] });
+    expect(restored.read().resources?.find((item) => item.id === 'board-roadmap')).toMatchObject({
+      sorts: [{ propertyId: 'score', direction: 'descending' }],
+      group: { propertyId: 'status' },
+      subgroup: { propertyId: 'due' },
+      projection: { propertyIds: ['status', 'score'], openMode: 'side_peek', cardPreview: 'cover' },
+    });
+  });
+
   it('migrates database v2 to data source v1 idempotently without losing values', () => {
     const schemaWithAudit: NotionSchema = {
       properties: [
