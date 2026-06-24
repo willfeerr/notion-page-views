@@ -16,9 +16,7 @@ export interface BlockIdentityIndex {
   blocks: BlockIdentityEntry[];
 }
 
-export type SerializedEditorStateWithBlockIndex = SerializedEditorState & {
-  blockIndex?: BlockIdentityIndex;
-};
+export type SerializedEditorStateWithBlockIndex = SerializedEditorState & { blockIndex?: BlockIdentityIndex };
 
 type SerializedNode = {
   type?: string;
@@ -43,9 +41,7 @@ function normalizeText(value: string) {
 function collectText(node: SerializedNode): string {
   const own = typeof node.text === 'string' ? node.text : '';
   const childText = Array.isArray(node.children) ? node.children.map(collectText).join(' ') : '';
-  const semanticTarget = node.type === 'workspace-component' && typeof node.targetId === 'string'
-    ? `${node.componentType ?? 'resource'}:${node.targetId}`
-    : '';
+  const semanticTarget = node.type === 'workspace-component' && typeof node.targetId === 'string' ? `${node.componentType ?? 'resource'}:${node.targetId}` : '';
   const semanticUrl = typeof node.url === 'string' ? node.url : '';
   return normalizeText([own, childText, semanticTarget, semanticUrl].filter(Boolean).join(' '));
 }
@@ -60,33 +56,25 @@ function walkBlocks(node: SerializedNode, path: number[] = [], output: Omit<Bloc
     const text = collectText(node);
     output.push({ path: path.join('.'), type, fingerprint: fingerprintFor(node, text), text });
   }
-  if (Array.isArray(node.children)) {
-    node.children.forEach((child, index) => walkBlocks(child, [...path, index], output));
-  }
+  if (Array.isArray(node.children)) node.children.forEach((child, index) => walkBlocks(child, [...path, index], output));
   return output;
 }
 
 function indexPreviousBlocks(previous?: BlockIdentityIndex) {
   const byPathAndFingerprint = new Map<string, BlockIdentityEntry>();
+  const byPath = new Map<string, BlockIdentityEntry>();
   const byFingerprint = new Map<string, BlockIdentityEntry[]>();
   for (const block of previous?.blocks ?? []) {
     byPathAndFingerprint.set(`${block.path}|${block.fingerprint}`, block);
+    byPath.set(block.path, block);
     const group = byFingerprint.get(block.fingerprint) ?? [];
     group.push(block);
     byFingerprint.set(block.fingerprint, group);
   }
-  return { byPathAndFingerprint, byFingerprint };
+  return { byPathAndFingerprint, byPath, byFingerprint };
 }
 
-export function createBlockIdentityIndex(
-  editorState: SerializedEditorState,
-  options: {
-    pageId?: string;
-    previous?: BlockIdentityIndex;
-    now?: string;
-    createId?: () => string;
-  } = {},
-): BlockIdentityIndex {
+export function createBlockIdentityIndex(editorState: SerializedEditorState, options: { pageId?: string; previous?: BlockIdentityIndex; now?: string; createId?: () => string } = {}): BlockIdentityIndex {
   const now = options.now ?? new Date().toISOString();
   const createId = options.createId ?? (() => `block-${crypto.randomUUID()}`);
   const root = (editorState as unknown as { root?: SerializedNode }).root;
@@ -96,8 +84,9 @@ export function createBlockIdentityIndex(
 
   const blocks = candidates.map((candidate) => {
     const exact = previous.byPathAndFingerprint.get(`${candidate.path}|${candidate.fingerprint}`);
+    const samePath = previous.byPath.get(candidate.path);
     const fuzzy = previous.byFingerprint.get(candidate.fingerprint)?.find((entry) => !usedIds.has(entry.id));
-    const source = exact && !usedIds.has(exact.id) ? exact : fuzzy;
+    const source = [exact, samePath, fuzzy].find((entry): entry is BlockIdentityEntry => Boolean(entry && !usedIds.has(entry.id)));
     const id = source?.id ?? createId();
     usedIds.add(id);
     return { id, pageId: options.pageId, updatedAt: now, ...candidate };
@@ -106,19 +95,8 @@ export function createBlockIdentityIndex(
   return { version: 1, updatedAt: now, blocks };
 }
 
-export function withStableBlockIds(
-  editorState: SerializedEditorState,
-  options: {
-    pageId?: string;
-    previous?: BlockIdentityIndex;
-    now?: string;
-    createId?: () => string;
-  } = {},
-): SerializedEditorStateWithBlockIndex {
-  return {
-    ...(editorState as SerializedEditorStateWithBlockIndex),
-    blockIndex: createBlockIdentityIndex(editorState, options),
-  };
+export function withStableBlockIds(editorState: SerializedEditorState, options: { pageId?: string; previous?: BlockIdentityIndex; now?: string; createId?: () => string } = {}): SerializedEditorStateWithBlockIndex {
+  return { ...(editorState as SerializedEditorStateWithBlockIndex), blockIndex: createBlockIdentityIndex(editorState, options) };
 }
 
 export function getBlockIdentityIndex(editorState?: SerializedEditorState | null): BlockIdentityIndex | undefined {
