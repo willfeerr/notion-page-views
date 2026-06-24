@@ -58,6 +58,10 @@ A Relation definition stores its `targetDataSourceId`; row values contain only r
 relation filters IDs against canonical target ownership and never changes either page's ownership. Deleting a
 target page removes its ID from relation values in every loaded data source.
 
+Board placement is limited to views on the page's current data source. Cross-source transfer is exposed as the
+separate `Mover para...` command, which previews every direct conversion and archived property before creating
+the journal operation. The last completed move can be undone from the page toolbar.
+
 Selecting a different board grouping property changes only the view configuration. Rows without a valid value render in the synthetic `Sem status` lane; the application does not silently rewrite them.
 
 ## Creation protocol

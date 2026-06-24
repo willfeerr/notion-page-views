@@ -13,7 +13,7 @@ import { WorkspaceYjsStore } from './workspaceYjs';
 import { downloadJson, pageExport, pageSearchText, workspaceExport } from './exportJson';
 import {
   buildInitialDataSourceProperties, buildProperty, createId, emptyValueFor, normalizeDateValue, schemaForResource,
-  type BoardResource, type CalendarResource, type WorkspaceResource,
+  type BoardResource, type CalendarResource, type PageOwnership, type PropertyMapping, type WorkspaceResource,
 } from './domain';
 import { ROOM_NAMES } from './yjs/model';
 
@@ -72,6 +72,7 @@ export default function App() {
   const [resources, setResources] = useState<WorkspaceResource[]>(initial.resources ?? []);
   const [pageSchemas, setPageSchemas] = useState<Record<string, NotionSchema>>({});
   const [dataSourceSchemas, setDataSourceSchemas] = useState<Record<string, NotionSchema>>({});
+  const [ownership, setOwnership] = useState<Record<string, PageOwnership>>({});
   const [view, setView] = useState<View>('board');
   const [activeResourceId, setActiveResourceId] = useState('board-roadmap');
   const [creatingType, setCreatingType] = useState<WorkspaceResource['type'] | null>(null);
@@ -83,6 +84,8 @@ export default function App() {
   const [collabUser, setCollabUser] = useState(loadCollabUser);
   const [presence, setPresence] = useState<CollabPresence[]>([]);
   const [editingLocation, setEditingLocation] = useState('Corpo do documento');
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [lastMoveOperationId, setLastMoveOperationId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     const stored = localStorage.getItem('skrbe-sidebar-collapsed');
     return stored === null ? window.matchMedia('(max-width: 760px)').matches : stored === 'true';
@@ -120,6 +123,7 @@ export default function App() {
       setResources(state.resources ?? []);
       setPageSchemas(state.pageSchemas ?? {});
       setDataSourceSchemas(state.dataSourceSchemas ?? {});
+      setOwnership(state.ownership ?? {});
     });
 
     return () => {
@@ -144,6 +148,7 @@ export default function App() {
   const openPageResource = openPage
     ? resources.find((resource) => resource.pageIds.includes(openPage.id))
     : undefined;
+  const openPageDataSourceId = openPage ? ownership[openPage.id]?.dataSourceId : undefined;
   const openPageBoard = openPage
     ? resources.find((resource): resource is BoardResource => resource.type === 'board' && resource.pageIds.includes(openPage.id))
     : undefined;
@@ -231,12 +236,24 @@ export default function App() {
 
     const target = resources.find((resource): resource is BoardResource => resource.type === 'board' && resource.id === placement.boardId);
     if (!target || !placement.laneId) return;
-    if (openPageResource && openPageResource.dataSourceId !== target.dataSourceId) {
-      if (!confirm('Esta pagina pertence a outro database. Mover para o database deste board?')) return;
-    }
-    if (openPageResource?.dataSourceId !== target.dataSourceId) workspaceStoreRef.current?.linkPage(target.id, openPage.id);
+    if (openPageResource?.dataSourceId !== target.dataSourceId) return;
     workspaceStoreRef.current?.updateProperty(openPage.id, target.statusPropertyId, placement.laneId);
     setActiveResourceId(target.id);
+  }
+
+  function moveOpenPage(targetDataSourceId: string, propertyMapping: PropertyMapping[]) {
+    if (!openPage) return;
+    const operation = workspaceStoreRef.current?.prepareMove(openPage.id, targetDataSourceId, propertyMapping);
+    if (!operation) return;
+    const result = workspaceStoreRef.current?.commitMove(operation.id);
+    if (result?.status === 'cleaned') setLastMoveOperationId(result.id);
+    setMoveDialogOpen(false);
+  }
+
+  function undoLastMove() {
+    if (!lastMoveOperationId) return;
+    const result = workspaceStoreRef.current?.undoMove(lastMoveOperationId);
+    if (result?.status === 'undone') setLastMoveOperationId(null);
   }
 
   function updateSchema(
@@ -632,7 +649,7 @@ export default function App() {
                 {presence.filter((item) => item.userId !== collabUser.id).slice(0, 3).map((item) => <i key={item.clientId} style={{ background: item.color }} title={`${item.name} · ${item.location}`} />)}
                 {presence.length > 4 ? <b>+{presence.length - 4}</b> : null}
               </button>
-              <div><button type="button" title="Exportar pagina como JSON" onClick={() => downloadJson(openPage.title, pageExport(openPage, openPageSchema))}><FileJson size={14} />Exportar JSON</button><button type="button" title="Excluir pagina" onClick={deleteOpenPage}><Trash2 size={14} /></button><button title="Fechar" onClick={() => setView(activeResource?.type ?? 'board')}><X size={15} /></button></div>
+              <div>{lastMoveOperationId ? <button type="button" onClick={undoLastMove}><RotateCcw size={14} />Desfazer move</button> : null}<button type="button" onClick={() => setMoveDialogOpen(true)}>Mover para...</button><button type="button" title="Exportar pagina como JSON" onClick={() => downloadJson(openPage.title, pageExport(openPage, openPageSchema))}><FileJson size={14} />Exportar JSON</button><button type="button" title="Excluir pagina" onClick={deleteOpenPage}><Trash2 size={14} /></button><button title="Fechar" onClick={() => setView(activeResource?.type ?? 'board')}><X size={15} /></button></div>
             </div>
             <NotionPageView
               schema={openPageSchema}
@@ -647,7 +664,7 @@ export default function App() {
               onSchemaChange={openPageResource
                 ? (next) => updateSchema(next, {}, openPageResource)
                 : (next) => workspaceStoreRef.current?.applyPageSchema(openPage.id, next)}
-              boardOptions={boardOptions}
+              boardOptions={boardOptions.filter((board) => board.databaseId === openPageDataSourceId)}
               boardPlacement={boardPlacement}
               onBoardPlacementChange={updateBoardPlacement}
               relationTargets={relationTargets}
@@ -657,8 +674,65 @@ export default function App() {
         )}
       </main>
       {creatingType ? <CreateResourceDialog type={creatingType} schema={schemaCatalog} onClose={() => setCreatingType(null)} onCreate={createResource} /> : null}
+      {moveDialogOpen && openPageDataSourceId ? <MovePageDialog
+        sourceSchema={openPageSchema}
+        sourceDataSourceId={openPageDataSourceId}
+        targets={relationTargets.map((target) => ({ ...target, schema: dataSourceSchemas[target.id] ?? { properties: [] } }))}
+        onClose={() => setMoveDialogOpen(false)}
+        onMove={moveOpenPage}
+      /> : null}
     </div>
   );
+}
+
+function MovePageDialog({ sourceSchema, sourceDataSourceId, targets, onClose, onMove }: {
+  sourceSchema: NotionSchema;
+  sourceDataSourceId: string;
+  targets: Array<RelationTargetOption & { schema: NotionSchema }>;
+  onClose: () => void;
+  onMove: (targetDataSourceId: string, mapping: PropertyMapping[]) => void;
+}) {
+  const availableTargets = targets.filter((target) => target.id !== sourceDataSourceId);
+  const [targetId, setTargetId] = useState(availableTargets[0]?.id ?? '');
+  const target = availableTargets.find((candidate) => candidate.id === targetId);
+  const suggested = sourceSchema.properties.map((source) => {
+    const exact = target?.schema.properties.find((candidate) => candidate.id === source.id);
+    const byName = target?.schema.properties.find((candidate) => candidate.name.trim().toLocaleLowerCase() === source.name.trim().toLocaleLowerCase());
+    return [source.id, exact?.id ?? byName?.id ?? ''] as const;
+  });
+  const [mapping, setMapping] = useState<Record<string, string>>(() => Object.fromEntries(suggested));
+
+  function selectTarget(nextTargetId: string) {
+    const nextTarget = availableTargets.find((candidate) => candidate.id === nextTargetId);
+    setTargetId(nextTargetId);
+    setMapping(Object.fromEntries(sourceSchema.properties.map((source) => {
+      const exact = nextTarget?.schema.properties.find((candidate) => candidate.id === source.id);
+      const byName = nextTarget?.schema.properties.find((candidate) => candidate.name.trim().toLocaleLowerCase() === source.name.trim().toLocaleLowerCase());
+      return [source.id, exact?.id ?? byName?.id ?? ''];
+    })));
+  }
+
+  const propertyMapping: PropertyMapping[] = sourceSchema.properties.map((source) => {
+    const targetPropertyId = mapping[source.id];
+    const targetProperty = target?.schema.properties.find((candidate) => candidate.id === targetPropertyId);
+    return targetProperty ? {
+      sourcePropertyId: source.id,
+      targetPropertyId,
+      conversion: source.type === targetProperty.type ? 'direct' : 'convert',
+    } : { sourcePropertyId: source.id, conversion: 'archive' };
+  });
+
+  return <div className="lab-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <form className="lab-dialog lab-move-dialog" onSubmit={(event) => { event.preventDefault(); if (targetId) onMove(targetId, propertyMapping); }}>
+      <header><span>⇢</span><div><strong>Mover pagina</strong><small>Confirme como cada propriedade sera tratada.</small></div></header>
+      <label>Data Source de destino<select value={targetId} onChange={(event) => selectTarget(event.target.value)}>{availableTargets.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}</select></label>
+      <div className="lab-move-mapping">{sourceSchema.properties.map((source) => {
+        const selected = target?.schema.properties.find((candidate) => candidate.id === mapping[source.id]);
+        return <label key={source.id}><span><strong>{source.name}</strong><small>{source.type}</small></span><select value={mapping[source.id] ?? ''} onChange={(event) => setMapping((current) => ({ ...current, [source.id]: event.target.value }))}><option value="">Arquivar no snapshot</option>{target?.schema.properties.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name} ({candidate.type})</option>)}</select><em>{selected ? selected.type === source.type ? 'Direto' : 'Converter' : 'Arquivar'}</em></label>;
+      })}</div>
+      <footer><button type="button" onClick={onClose}>Cancelar</button><button type="submit" disabled={!targetId}>Confirmar movimento</button></footer>
+    </form>
+  </div>;
 }
 
 function CreateResourceDialog({ type, schema, onClose, onCreate }: { type: WorkspaceResource['type']; schema: NotionSchema; onClose: () => void; onCreate: (type: WorkspaceResource['type'], title: string, existingDatePropertyId?: string) => void }) {
