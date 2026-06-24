@@ -117,6 +117,32 @@ export interface DatabasePageTemplate {
   updatedAt: string;
 }
 
+export interface PageBlockReference {
+  pageId: string;
+  blockId: string;
+}
+
+export interface PageCommentThread {
+  id: string;
+  pageId: string;
+  blockId: string;
+  status: 'open' | 'resolved';
+  createdAt: string;
+  updatedAt: string;
+  commentIds: string[];
+}
+
+export interface PageComment {
+  id: string;
+  threadId: string;
+  pageId: string;
+  blockId: string;
+  authorId: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface BoardLinkLane {
   id: string;
   name: string;
