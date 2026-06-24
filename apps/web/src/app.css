@@ -299,7 +299,19 @@ button { cursor: pointer; }
   .lab-board-grouping span { display: none; }
   .lab-board-grouping select { min-width: 0; max-width: 118px; height: 36px; }
   .lab-board-actions > button { min-width: 40px; min-height: 40px; justify-content: center; padding: 0 10px; }
-  .lab-column, .lab-add-lane { width: min(260px, 82vw); min-width: min(260px, 82vw); }
+  .lab-board {
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: 0;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .lab-board::-webkit-scrollbar { display: none; }
+  .lab-column, .lab-add-lane {
+    width: min(260px, 82vw);
+    min-width: min(260px, 82vw);
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
   .lab-page-toolbar { top: 50px; height: 44px; padding: 0 6px; }
   .lab-page-toolbar > button:first-child { max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .lab-page-toolbar .lab-presence-summary { width: 34px; padding-inline: 8px; }
