@@ -69,7 +69,15 @@ export interface CollectionResource extends ResourceBase {
   type: 'table' | 'list' | 'gallery';
 }
 
-export type WorkspaceResource = BoardResource | CalendarResource | TimelineResource | CollectionResource;
+export interface ChartResource extends ResourceBase {
+  type: 'chart';
+  chartType: 'bar' | 'line' | 'donut';
+  groupPropertyId?: string;
+  valuePropertyId?: string;
+  aggregation: 'count' | 'sum' | 'average';
+}
+
+export type WorkspaceResource = BoardResource | CalendarResource | TimelineResource | CollectionResource | ChartResource;
 
 export interface DatabaseContainer {
   id: string;

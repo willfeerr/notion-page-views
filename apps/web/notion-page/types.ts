@@ -92,6 +92,18 @@ export interface NotionSchema {
   properties: PropertyDefinition[];
 }
 
+export interface DatabasePageLayoutSection {
+  id: string;
+  title: string;
+  propertyIds: string[];
+  collapsed?: boolean;
+}
+
+export interface DatabasePageLayout {
+  pinnedPropertyIds: string[];
+  sections: DatabasePageLayoutSection[];
+}
+
 export interface BoardLinkLane {
   id: string;
   name: string;

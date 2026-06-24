@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from 'react';
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { createPortal } from 'react-dom';
-import { CalendarDays, CalendarRange, FileJson, FileText, GripVertical, Images, List, Moon, PanelLeftClose, PanelLeftOpen, Plus, RotateCcw, Search, Sun, Table2, Trash2, X } from 'lucide-react';
+import { BarChart3, CalendarDays, CalendarRange, FileJson, FileText, GripVertical, Images, List, Moon, PanelLeftClose, PanelLeftOpen, Plus, RotateCcw, Search, Sun, Table2, Trash2, X } from 'lucide-react';
 import type { SerializedEditorState } from 'lexical';
 import { NotionEditor, NotionPageCard, NotionPageView } from '../notion-page';
 import { PropertiesPanel } from '../notion-page/PropertiesPanel';
 import { samplePages, sampleSchema } from '../notion-page/example/sampleData';
-import type { BoardLinkOption, BoardLinkValue, CollabPresence, NotionPageData, NotionSchema, RelationTargetOption, StoredPropertyValue } from '../notion-page/types';
+import type { BoardLinkOption, BoardLinkValue, CollabPresence, DatabasePageLayout, NotionPageData, NotionSchema, RelationTargetOption, StoredPropertyValue } from '../notion-page/types';
 import { BroadcastProvider } from '../notion-page/editor/BroadcastProvider';
 import { CalendarView } from './CalendarView';
+import { ChartView } from './ChartView';
 import { DatabaseCollectionView } from './DatabaseCollectionView';
 import { WorkspaceYjsStore } from './workspaceYjs';
 import { downloadJson, pageExport, pageSearchText, workspaceExport } from './exportJson';
@@ -19,6 +20,7 @@ import {
 import { ROOM_NAMES } from './yjs/model';
 import { executeViewQuery } from './viewQuery';
 import { defaultPropertyValue } from './propertyRegistry';
+import { ViewSettings } from './ViewSettings';
 
 type View = WorkspaceResource['type'] | 'page';
 
@@ -47,6 +49,7 @@ function isCurrentResource(resource: unknown): resource is WorkspaceResource {
     || !Array.isArray(candidate.pageIds) || !Array.isArray(candidate.propertyIds)) return false;
   if (candidate.type === 'board') return typeof candidate.statusPropertyId === 'string';
   if (candidate.type === 'calendar' || candidate.type === 'timeline') return typeof candidate.datePropertyId === 'string';
+  if (candidate.type === 'chart') return typeof candidate.chartType === 'string' && typeof candidate.aggregation === 'string';
   return candidate.type === 'table' || candidate.type === 'list' || candidate.type === 'gallery';
 }
 
@@ -76,6 +79,7 @@ export default function App() {
   const [resources, setResources] = useState<WorkspaceResource[]>(initial.resources ?? []);
   const [pageSchemas, setPageSchemas] = useState<Record<string, NotionSchema>>({});
   const [dataSourceSchemas, setDataSourceSchemas] = useState<Record<string, NotionSchema>>({});
+  const [dataSourceLayouts, setDataSourceLayouts] = useState<Record<string, DatabasePageLayout>>({});
   const [ownership, setOwnership] = useState<Record<string, PageOwnership>>({});
   const [view, setView] = useState<View>('board');
   const [activeResourceId, setActiveResourceId] = useState('board-roadmap');
@@ -90,6 +94,7 @@ export default function App() {
   const [editingLocation, setEditingLocation] = useState('Corpo do documento');
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [lastMoveOperationId, setLastMoveOperationId] = useState<string | null>(null);
+  const [peekMode, setPeekMode] = useState<'side_peek' | 'center_peek' | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     const stored = localStorage.getItem('skrbe-sidebar-collapsed');
     return stored === null ? window.matchMedia('(max-width: 760px)').matches : stored === 'true';
@@ -127,6 +132,7 @@ export default function App() {
       setResources(state.resources ?? []);
       setPageSchemas(state.pageSchemas ?? {});
       setDataSourceSchemas(state.dataSourceSchemas ?? {});
+      setDataSourceLayouts(state.dataSourceLayouts ?? {});
       setOwnership(state.ownership ?? {});
     });
 
@@ -232,6 +238,20 @@ export default function App() {
     workspaceStoreRef.current?.updateProperty(pageId, propertyId, value);
   }
 
+  function openDatabasePage(pageId: string) {
+    const mode = activeResource?.projection?.openMode ?? 'full_page';
+    setOpenId(pageId);
+    if (mode === 'full_page') {
+      setPeekMode(null);
+      setView('page');
+    } else setPeekMode(mode);
+  }
+
+  function closePageView() {
+    if (peekMode) setPeekMode(null);
+    else setView(activeResource?.type ?? 'board');
+  }
+
   function updateBoardPlacement(placement: BoardLinkValue | null) {
     if (!openPage) return;
     if (!placement) {
@@ -314,6 +334,7 @@ export default function App() {
     });
     workspaceStoreRef.current?.insertPage(page, afterPageId, targetResource?.dataSourceId);
     setOpenId(page.id);
+    setPeekMode(null);
     setView('page');
   }
 
@@ -424,6 +445,7 @@ export default function App() {
       activeResource?.type === 'calendar' ? activeResource.dataSourceId : undefined,
     );
     setOpenId(page.id);
+    setPeekMode(null);
     setView('page');
   }
 
@@ -456,12 +478,16 @@ export default function App() {
     const id = createId(type);
     const base = { id, databaseId, dataSourceId, title, pageIds: owner?.pageIds ?? [], propertyIds };
     const projection = { propertyIds, openMode: 'full_page' as const, cardPreview: type === 'gallery' ? 'cover' as const : 'none' as const };
+    const groupProperty = (selectedSchema ?? { properties: initialDefinitions }).properties.find((property) => ['select', 'multi_select', 'status', 'text'].includes(property.type));
+    const valueProperty = (selectedSchema ?? { properties: initialDefinitions }).properties.find((property) => ['number', 'formula', 'rollup'].includes(property.type));
     const resource: WorkspaceResource = type === 'board'
       ? { ...base, type, statusPropertyId: primary.id, group: { propertyId: primary.id }, projection: { ...projection, cardPreview: 'content' } }
       : type === 'calendar'
         ? { ...base, type, datePropertyId: primary.id, timezone: 'America/Sao_Paulo', defaultView: 'month', visibleHours: { from: 7, to: 21 }, projection }
         : type === 'timeline'
           ? { ...base, type, datePropertyId: primary.id, timezone: 'America/Sao_Paulo', projection }
+          : type === 'chart'
+            ? { ...base, type, chartType: 'bar', aggregation: 'count', groupPropertyId: groupProperty?.id, valuePropertyId: valueProperty?.id, projection }
           : { ...base, type, projection };
     workspaceStoreRef.current?.createResource(resource, initialDefinitions);
     setActiveResourceId(resource.id);
@@ -478,6 +504,16 @@ export default function App() {
     setActiveResourceId(resource.id);
     setView(resource.type);
     closeMobileSidebar();
+  }
+
+  function updateActiveResource(patch: Partial<WorkspaceResource>) {
+    if (!activeResource) return;
+    let nextPatch = patch;
+    if (activeResource.type === 'board' && patch.group) {
+      const grouping = activeSchema.properties.find((property) => property.id === patch.group?.propertyId && property.type === 'status');
+      if (grouping) nextPatch = { ...patch, statusPropertyId: grouping.id } as Partial<WorkspaceResource>;
+    }
+    workspaceStoreRef.current?.updateResource(activeResource.id, nextPatch);
   }
 
   function renameResource(resource: WorkspaceResource) {
@@ -498,6 +534,7 @@ export default function App() {
   function deleteOpenPage() {
     if (!openPage || !confirm(`Excluir a pagina "${openPage.title}"?`)) return;
     workspaceStoreRef.current?.deletePage(openPage.id);
+    setPeekMode(null);
     const next = pages.find((page) => page.id !== openPage.id);
     setOpenId(next?.id ?? null);
     setView(activeResource?.type ?? 'board');
@@ -544,7 +581,7 @@ export default function App() {
         <div className="lab-sidebar-label"><span>APPS</span><button type="button" title="Novo board" onClick={() => setCreatingType('board')}><Plus size={13} /></button></div>
         {resources.map((resource) => (
           <div key={resource.id} className={`lab-resource-row${view === resource.type && activeResource?.id === resource.id ? ' is-active' : ''}`}>
-            <button type="button" title={resource.title} onClick={() => openResource(resource)} onDoubleClick={() => renameResource(resource)}>{resource.type === 'calendar' ? <CalendarDays size={14} /> : resource.type === 'timeline' ? <CalendarRange size={14} /> : resource.type === 'table' ? <Table2 size={14} /> : resource.type === 'list' ? <List size={14} /> : resource.type === 'gallery' ? <Images size={14} /> : <span className="lab-nav-symbol">▦</span>}<span>{resource.title}</span></button>
+            <button type="button" title={resource.title} onClick={() => openResource(resource)} onDoubleClick={() => renameResource(resource)}>{resource.type === 'calendar' ? <CalendarDays size={14} /> : resource.type === 'timeline' ? <CalendarRange size={14} /> : resource.type === 'table' ? <Table2 size={14} /> : resource.type === 'list' ? <List size={14} /> : resource.type === 'gallery' ? <Images size={14} /> : resource.type === 'chart' ? <BarChart3 size={14} /> : <span className="lab-nav-symbol">▦</span>}<span>{resource.title}</span></button>
             <button type="button" title="Renomear" onClick={() => renameResource(resource)}>✎</button>
             <button type="button" title="Excluir" onClick={() => deleteResource(resource)}><Trash2 size={12} /></button>
           </div>
@@ -556,11 +593,12 @@ export default function App() {
           <button type="button" title="Nova lista" onClick={() => setCreatingType('list')}><Plus size={13} /><span>Lista</span></button>
           <button type="button" title="Nova galeria" onClick={() => setCreatingType('gallery')}><Plus size={13} /><span>Galeria</span></button>
           <button type="button" title="Nova timeline" onClick={() => setCreatingType('timeline')}><Plus size={13} /><span>Timeline</span></button>
+          <button type="button" title="Novo grafico" onClick={() => setCreatingType('chart')}><Plus size={13} /><span>Grafico</span></button>
         </div>
         <div className="lab-sidebar-label"><span>PAGINAS</span><button type="button" title="Nova pagina independente" onClick={() => createPage()}><Plus size={13} /></button></div>
         <div className="lab-page-list">
           {pages.map((page) => (
-            <button key={page.id} type="button" title={page.title || 'Sem titulo'} className={view === 'page' && openPage?.id === page.id ? 'is-active' : ''} onClick={() => { setOpenId(page.id); setView('page'); closeMobileSidebar(); }}>
+            <button key={page.id} type="button" title={page.title || 'Sem titulo'} className={view === 'page' && openPage?.id === page.id ? 'is-active' : ''} onClick={() => { setPeekMode(null); setOpenId(page.id); setView('page'); closeMobileSidebar(); }}>
               <span>{page.icon || <FileText size={13} />}</span><span>{page.title || 'Sem titulo'}</span>
             </button>
           ))}
@@ -574,6 +612,7 @@ export default function App() {
           <div className="lab-search"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar paginas" /></div>
           <div className="lab-top-actions">
             <span>{pages.length} paginas · {schemaCatalog.properties.length} propriedades</span>
+            {activeResource && view !== 'page' ? <ViewSettings resource={activeResource} schema={activeSchema} onChange={updateActiveResource} /> : null}
             <button className="lab-theme-toggle" type="button" title={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
               {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
             </button>
@@ -630,7 +669,7 @@ export default function App() {
                     </header>
                     <div className="lab-card-list">
                       {columnPages.map((page) => (
-                        <BoardCardDnd key={page.id} pageId={page.id} statusId={status.id} dragging={draggingId === page.id} renderCard={(dragHandleProps) => <NotionPageCard schema={activeSchema} page={page} visiblePropertyIds={boardVisiblePropertyIds} showWindowControls dragHandleProps={dragHandleProps} onDelete={() => workspaceStoreRef.current?.deletePage(page.id)} onPropertyChange={(propertyId, value) => updateProperty(page.id, propertyId, value)} onContentChange={(content) => updatePage(page.id, { content })} onClick={() => { setOpenId(page.id); setView('page'); }} />} after={<div className="lab-insert-row">
+                        <BoardCardDnd key={page.id} pageId={page.id} statusId={status.id} dragging={draggingId === page.id} renderCard={(dragHandleProps) => <NotionPageCard schema={activeSchema} page={page} visiblePropertyIds={boardVisiblePropertyIds} showWindowControls dragHandleProps={dragHandleProps} onDelete={() => workspaceStoreRef.current?.deletePage(page.id)} onPropertyChange={(propertyId, value) => updateProperty(page.id, propertyId, value)} onContentChange={(content) => updatePage(page.id, { content })} onClick={() => openDatabasePage(page.id)} />} after={<div className="lab-insert-row">
                             <span />
                             <button type="button" onClick={() => createBoardPage(status.id, page.id)} title="Adicionar pagina depois deste card">+</button>
                             <span />
@@ -667,7 +706,7 @@ export default function App() {
             defaultView={activeResource?.type === 'calendar' ? activeResource.defaultView : 'month'}
             visibleHours={activeResource?.type === 'calendar' ? activeResource.visibleHours : { from: 7, to: 21 }}
             onViewChange={(defaultView) => activeResource?.type === 'calendar' && workspaceStoreRef.current?.updateResource(activeResource.id, { defaultView } as Partial<WorkspaceResource>)}
-            onOpenPage={(pageId) => { setOpenId(pageId); setView('page'); }}
+            onOpenPage={openDatabasePage}
             onCreatePage={createCalendarPage}
             onMoveEvent={moveCalendarEvent}
           />
@@ -679,23 +718,33 @@ export default function App() {
             resource={activeResource}
             schema={activeSchema}
             pages={activePages}
-            onOpenPage={(pageId) => { setOpenId(pageId); setView('page'); }}
+            onOpenPage={openDatabasePage}
             onCreatePage={() => createPage(undefined, undefined, activeResource.id)}
             onPropertyChange={updateProperty}
           />
         ) : null}
 
-        {view === 'page' && openPage && (
-          <section className="lab-page-stage">
+        {view === 'chart' && activeResource?.type === 'chart' ? (
+          <ChartView
+            resource={activeResource}
+            schema={activeSchema}
+            pages={activePages}
+            onCreatePage={() => createPage(undefined, undefined, activeResource.id)}
+            onChange={(patch) => workspaceStoreRef.current?.updateResource(activeResource.id, patch)}
+          />
+        ) : null}
+
+        {(view === 'page' || peekMode) && openPage && (
+          <section className={`lab-page-stage${peekMode ? ` is-${peekMode}` : ''}`}>
             <div className="lab-page-toolbar">
-              <button onClick={() => setView(activeResource?.type ?? 'board')}>← {activeResource?.title ?? 'Workspace'}</button>
+              <button onClick={closePageView}>← {activeResource?.title ?? 'Workspace'}</button>
               <button type="button" className="lab-presence-summary" onClick={renameCollabUser} title={presence.length ? presence.map((item) => `${item.name} · ${item.location}`).join('\n') : 'Alterar nome colaborativo'}>
                 <i style={{ background: collabUser.color }} />
                 <span>{collabUser.name} · {editingLocation}</span>
                 {presence.filter((item) => item.userId !== collabUser.id).slice(0, 3).map((item) => <i key={item.clientId} style={{ background: item.color }} title={`${item.name} · ${item.location}`} />)}
                 {presence.length > 4 ? <b>+{presence.length - 4}</b> : null}
               </button>
-              <div>{lastMoveOperationId ? <button type="button" onClick={undoLastMove}><RotateCcw size={14} />Desfazer move</button> : null}<button type="button" onClick={() => setMoveDialogOpen(true)}>Mover para...</button><button type="button" title="Exportar pagina como JSON" onClick={() => downloadJson(openPage.title, pageExport(openPage, openPageSchema))}><FileJson size={14} />Exportar JSON</button><button type="button" title="Excluir pagina" onClick={deleteOpenPage}><Trash2 size={14} /></button><button title="Fechar" onClick={() => setView(activeResource?.type ?? 'board')}><X size={15} /></button></div>
+              <div>{lastMoveOperationId ? <button type="button" onClick={undoLastMove}><RotateCcw size={14} />Desfazer move</button> : null}<button type="button" onClick={() => setMoveDialogOpen(true)}>Mover para...</button><button type="button" title="Exportar pagina como JSON" onClick={() => downloadJson(openPage.title, pageExport(openPage, openPageSchema))}><FileJson size={14} />Exportar JSON</button><button type="button" title="Excluir pagina" onClick={deleteOpenPage}><Trash2 size={14} /></button><button title="Fechar" onClick={closePageView}><X size={15} /></button></div>
             </div>
             <NotionPageView
               schema={openPageSchema}
@@ -714,6 +763,8 @@ export default function App() {
               boardPlacement={boardPlacement}
               onBoardPlacementChange={updateBoardPlacement}
               relationTargets={relationTargets}
+              layout={openPageDataSourceId ? dataSourceLayouts[openPageDataSourceId] : undefined}
+              onLayoutChange={openPageDataSourceId ? (layout) => workspaceStoreRef.current?.updateDataSourceLayout(openPageDataSourceId, layout) : undefined}
               onEditingLocationChange={setEditingLocation}
             />
           </section>
@@ -798,7 +849,7 @@ function CreateResourceDialog({ type, schema, sources, onClose, onCreate }: {
   onClose: () => void;
   onCreate: (type: WorkspaceResource['type'], title: string, existingDatePropertyId?: string, sourceDataSourceId?: string) => void;
 }) {
-  const labels: Record<WorkspaceResource['type'], string> = { board: 'Board', calendar: 'Calendario', table: 'Tabela', list: 'Lista', gallery: 'Galeria', timeline: 'Timeline' };
+  const labels: Record<WorkspaceResource['type'], string> = { board: 'Board', calendar: 'Calendario', table: 'Tabela', list: 'Lista', gallery: 'Galeria', timeline: 'Timeline', chart: 'Grafico' };
   const label = labels[type];
   const [title, setTitle] = useState(`Novo ${label.toLocaleLowerCase()}`);
   const compatibleSources = sources.filter((source) => type === 'board'
@@ -810,7 +861,7 @@ function CreateResourceDialog({ type, schema, sources, onClose, onCreate }: {
   const [datePropertyId, setDatePropertyId] = useState('new');
   const selectedSource = compatibleSources.find((source) => source.id === sourceId);
   const dates = (selectedSource?.schema ?? schema).properties.filter((property) => property.type === 'date');
-  return <div className="lab-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><form className="lab-dialog" onSubmit={(event) => { event.preventDefault(); if (title.trim()) onCreate(type, title.trim(), datePropertyId === 'new' ? undefined : datePropertyId, sourceId === 'new' ? undefined : sourceId); }}><header><span>{type === 'board' ? '▦' : type === 'table' ? '▤' : type === 'list' ? '☷' : type === 'gallery' ? '▦' : '▣'}</span><div><strong>Nova view: {label}</strong><small>Crie uma fonte independente ou use uma Data Source existente.</small></div></header><label>Titulo<input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>Data Source<select value={sourceId} onChange={(event) => { setSourceId(event.target.value); setDatePropertyId('new'); }}><option value="new">Nova fonte de dados</option>{compatibleSources.map((source) => <option key={source.id} value={source.id}>{source.title}</option>)}</select></label>{type === 'calendar' || type === 'timeline' ? <label>Propriedade de data<select value={datePropertyId} onChange={(event) => setDatePropertyId(event.target.value)}><option value="new">{sourceId === 'new' ? 'Criar nova propriedade' : 'Usar primeira propriedade disponível'}</option>{dates.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}</select></label> : null}<footer><button type="button" onClick={onClose}>Cancelar</button><button type="submit">Criar</button></footer></form></div>;
+  return <div className="lab-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><form className="lab-dialog" onSubmit={(event) => { event.preventDefault(); if (title.trim()) onCreate(type, title.trim(), datePropertyId === 'new' ? undefined : datePropertyId, sourceId === 'new' ? undefined : sourceId); }}><header><span>{type === 'board' ? '▦' : type === 'table' ? '▤' : type === 'list' ? '☷' : type === 'gallery' ? '▦' : type === 'chart' ? '▥' : '▣'}</span><div><strong>Nova view: {label}</strong><small>Crie uma fonte independente ou use uma Data Source existente.</small></div></header><label>Titulo<input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>Data Source<select value={sourceId} onChange={(event) => { setSourceId(event.target.value); setDatePropertyId('new'); }}><option value="new">Nova fonte de dados</option>{compatibleSources.map((source) => <option key={source.id} value={source.id}>{source.title}</option>)}</select></label>{type === 'calendar' || type === 'timeline' ? <label>Propriedade de data<select value={datePropertyId} onChange={(event) => setDatePropertyId(event.target.value)}><option value="new">{sourceId === 'new' ? 'Criar nova propriedade' : 'Usar primeira propriedade disponível'}</option>{dates.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}</select></label> : null}<footer><button type="button" onClick={onClose}>Cancelar</button><button type="submit">Criar</button></footer></form></div>;
 }
 
 function EmbeddedPagePreview({ schema, page }: { schema: NotionSchema; page: NotionPageData }) {

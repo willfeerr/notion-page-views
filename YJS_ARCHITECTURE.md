@@ -33,6 +33,7 @@ Each data source document owns:
 - `schema-order`: ordered property IDs.
 - `pages`: one nested `Y.Map` per page containing property values, metadata projection, preview and per-view ranks.
 - `page-order`: deterministic fallback ordering.
+- `page-layout`: pinned properties and ordered, collapsible property sections shared by its database pages.
 
 Status option IDs remain stable when a lane is renamed. Changing a page status updates only that row.
 
@@ -40,7 +41,7 @@ Status option IDs remain stable when a lane is renamed. Changing a page status u
 
 A view points to one database container through `databaseId` and one source through `dataSourceId`. Its page list is derived from rows whose canonical ownership points to that source. Views never persist a membership copy.
 
-Board, Calendar, Table, List, Gallery and Timeline use this same reference contract. Table is the canonical
+Board, Calendar, Table, List, Gallery, Timeline and Chart use this same reference contract. Table is the canonical
 row-oriented interface; the other types are projections over the same query result. Creating a view can either
 allocate a new Data Source or select a compatible existing source, without copying rows.
 
@@ -63,7 +64,7 @@ The one-time `audit-properties-v1` repair restores legacy Created time and Last 
 Property defaults, read-only behavior, serialization and comparison are registered by type. The registry now
 covers the existing property set plus Relation, Files (URL-backed until object storage exists), Unique ID,
 Created by, Last edited by and Place. Unique IDs are deterministic per page and system-managed properties reject
-manual row updates. Formula and Rollup remain derived types and will be evaluated over this registry rather than
+manual row updates. Formula and Rollup are derived through a typed expression/aggregation evaluator and are not
 stored as user-editable values.
 
 Standalone pages have no database properties. They must be moved into a database before receiving Status, Date, Person or other database fields.

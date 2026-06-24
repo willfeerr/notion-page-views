@@ -373,7 +373,42 @@ describe('WorkspaceYjsStore', () => {
     });
   });
 
-  it('persists table, list, gallery and timeline as views of one data source', () => {
+  it('clears optional view settings instead of retaining stale values', () => {
+    const store = createStore();
+    store.initialize({ schema, pages: [page] });
+    store.updateResource('board-roadmap', { sorts: [{ propertyId: 'score', direction: 'ascending' }], subgroup: { propertyId: 'due' } });
+    store.updateResource('board-roadmap', { sorts: undefined, subgroup: undefined });
+    const board = store.read().resources?.find((item) => item.id === 'board-roadmap');
+    expect(board?.sorts).toBeUndefined();
+    expect(board?.subgroup).toBeUndefined();
+  });
+
+  it('persists one database page layout per data source and reconciles schema changes', () => {
+    const persisted = new Map<string, Doc>();
+    const store = createStore(undefined, persisted);
+    store.initialize({ schema, pages: [page] });
+    store.updateDataSourceLayout('roadmap', {
+      pinnedPropertyIds: ['status'],
+      sections: [
+        { id: 'planning', title: 'Planejamento', propertyIds: ['due'], collapsed: true },
+        { id: 'metrics', title: 'Métricas', propertyIds: ['score'] },
+      ],
+    });
+    store.applySchema('roadmap', { properties: [...schema.properties, { id: 'notes', name: 'Notes', type: 'text' }] });
+    store.destroy();
+
+    const restored = createStore(undefined, persisted);
+    restored.initialize({ schema, pages: [page] });
+    expect(restored.read().dataSourceLayouts?.roadmap).toEqual({
+      pinnedPropertyIds: ['status'],
+      sections: [
+        { id: 'planning', title: 'Planejamento', propertyIds: ['due', 'notes'], collapsed: true },
+        { id: 'metrics', title: 'Métricas', propertyIds: ['score'] },
+      ],
+    });
+  });
+
+  it('persists table, list, gallery, timeline and chart as views of one data source', () => {
     const persisted = new Map<string, Doc>();
     const store = createStore(undefined, persisted);
     store.initialize({ schema, pages: [page] });
@@ -381,14 +416,18 @@ describe('WorkspaceYjsStore', () => {
     store.createResource({ id: 'list-shared', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'list', title: 'List', pageIds: [], propertyIds: ['score'] });
     store.createResource({ id: 'gallery-shared', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'gallery', title: 'Gallery', pageIds: [], propertyIds: ['status'] });
     store.createResource({ id: 'timeline-shared', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'timeline', title: 'Timeline', pageIds: [], propertyIds: ['due'], datePropertyId: 'due', timezone: 'America/Sao_Paulo' });
+    store.createResource({ id: 'chart-shared', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'chart', title: 'Chart', pageIds: [], propertyIds: ['status', 'score'], chartType: 'donut', aggregation: 'sum', groupPropertyId: 'status', valuePropertyId: 'score' });
     expect(store.read().resources?.filter((item) => item.id.endsWith('-shared')).every((item) => item.pageIds.includes('page-1'))).toBe(true);
     store.destroy();
 
     const restored = createStore(undefined, persisted);
     restored.initialize({ schema, pages: [page] });
     expect(restored.read().resources?.filter((item) => item.id.endsWith('-shared')).map((item) => item.type)).toEqual([
-      'table', 'list', 'gallery', 'timeline',
+      'table', 'list', 'gallery', 'timeline', 'chart',
     ]);
+    expect(restored.read().resources?.find((item) => item.id === 'chart-shared')).toMatchObject({
+      chartType: 'donut', aggregation: 'sum', groupPropertyId: 'status', valuePropertyId: 'score',
+    });
   });
 
   it('migrates database v2 to data source v1 idempotently without losing values', () => {

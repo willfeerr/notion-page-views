@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { SerializedEditorState } from 'lexical';
-import type { BoardLinkOption, BoardLinkValue, CollabConfig, NotionPageData, NotionSchema, PersonOption, RelationTargetOption, StoredPropertyValue } from './types';
+import type { BoardLinkOption, BoardLinkValue, CollabConfig, DatabasePageLayout, NotionPageData, NotionSchema, PersonOption, RelationTargetOption, StoredPropertyValue } from './types';
 import { PageHeader } from './PageHeader';
 import { PropertiesPanel } from './PropertiesPanel';
 import { NotionEditor } from './editor/NotionEditor';
@@ -24,6 +24,8 @@ interface NotionPageViewProps {
   boardPlacement?: BoardLinkValue | null;
   onBoardPlacementChange?: (placement: BoardLinkValue | null) => void;
   relationTargets?: RelationTargetOption[];
+  layout?: DatabasePageLayout;
+  onLayoutChange?: (layout: DatabasePageLayout) => void;
   onEditingLocationChange?: (location: string) => void;
 }
 
@@ -46,6 +48,7 @@ export function NotionPageView({
   onPropertyChange, onContentChange, onSchemaChange,
   boardOptions, boardPlacement, onBoardPlacementChange,
   relationTargets,
+  layout, onLayoutChange,
   onEditingLocationChange,
 }: NotionPageViewProps) {
   const [fullWidth, setFullWidth] = useState(false);
@@ -116,6 +119,8 @@ export function NotionPageView({
           boardPlacement={boardPlacement}
           onBoardPlacementChange={onBoardPlacementChange}
           relationTargets={relationTargets}
+          layout={layout}
+          onLayoutChange={onLayoutChange}
         />
         <div className="npc-page-divider" />
         <NotionEditor

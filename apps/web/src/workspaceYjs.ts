@@ -1,10 +1,10 @@
 import { Array as YArray, Doc, Map as YMap } from 'yjs';
 import type { SerializedEditorState } from 'lexical';
-import type { NotionPageData, NotionSchema, PropertyDefinition, StoredPropertyValue } from '../notion-page/types';
+import type { DatabasePageLayout, NotionPageData, NotionSchema, PropertyDefinition, StoredPropertyValue } from '../notion-page/types';
 import { getPlainTextPreview } from '../notion-page/editor/getPlainTextPreview';
 import {
   createId, DEFAULT_TIMEZONE, convertPropertyValue, emptyValueFor, type BoardResource,
-  type CalendarResource, type DatabaseContainer, type DataSourceReference,
+  type CalendarResource, type ChartResource, type DatabaseContainer, type DataSourceReference,
   type MoveOperation, type PageOwnership, type PropertyMapping, type SerializedRowSnapshot,
   type TimelineResource, type WorkspaceResource,
 } from './domain';
@@ -27,6 +27,7 @@ export interface WorkspaceState {
   /** Schema resolved from the owning data source for each page. */
   pageSchemas?: Record<string, NotionSchema>;
   dataSourceSchemas?: Record<string, NotionSchema>;
+  dataSourceLayouts?: Record<string, DatabasePageLayout>;
   moveOperations?: MoveOperation[];
 }
 
@@ -37,6 +38,8 @@ type ResourceInput = {
   id: string; databaseId?: string; dataSourceId?: string; type: WorkspaceResource['type']; title: string; pageIds: string[]; propertyIds?: string[];
   statusPropertyId?: string; datePropertyId?: string; timezone?: string;
   defaultView?: CalendarResource['defaultView']; visibleHours?: CalendarResource['visibleHours'];
+  chartType?: ChartResource['chartType']; groupPropertyId?: string; valuePropertyId?: string;
+  aggregation?: ChartResource['aggregation'];
 };
 
 interface ResourceReference {
@@ -54,6 +57,7 @@ interface DataSourceRoom {
   definitionOrder: YArray<string>;
   pages: YMap<YMap<unknown>>;
   pageOrder: YArray<string>;
+  pageLayout: YMap<unknown>;
   onTransaction: () => void;
 }
 
@@ -86,6 +90,34 @@ function replaceArray<T>(array: YArray<T>, values: T[]): void {
 
 function valuesEqual(left: unknown, right: unknown): boolean {
   return left === right || JSON.stringify(left) === JSON.stringify(right);
+}
+
+function defaultPageLayout(schema: NotionSchema): DatabasePageLayout {
+  return {
+    pinnedPropertyIds: [],
+    sections: [{ id: 'general', title: 'Geral', propertyIds: schema.properties.map((property) => property.id) }],
+  };
+}
+
+function readPageLayout(room: DataSourceRoom): DatabasePageLayout {
+  const schema = roomSchema(room);
+  const stored = safeJson<DatabasePageLayout>(room.pageLayout.get('value') as string | undefined);
+  if (!stored) return defaultPageLayout(schema);
+  const validIds = new Set(schema.properties.map((property) => property.id));
+  const pinnedPropertyIds = stored.pinnedPropertyIds.filter((id) => validIds.has(id)).slice(0, 4);
+  const assigned = new Set<string>();
+  const sections = stored.sections.map((section) => ({
+    ...section,
+    propertyIds: section.propertyIds.filter((id) => {
+      if (!validIds.has(id) || pinnedPropertyIds.includes(id) || assigned.has(id)) return false;
+      assigned.add(id);
+      return true;
+    }),
+  }));
+  const missing = schema.properties.map((property) => property.id).filter((id) => !pinnedPropertyIds.includes(id) && !assigned.has(id));
+  if (!sections.length) sections.push({ id: 'general', title: 'Geral', propertyIds: missing });
+  else sections[0] = { ...sections[0], propertyIds: [...sections[0].propertyIds, ...missing] };
+  return { pinnedPropertyIds, sections };
 }
 
 function safeJson<T>(value: string | undefined): T | null {
@@ -136,6 +168,13 @@ function normalizeResource(resource: ResourceInput, schema: NotionSchema): Works
   if (resource.type === 'table' || resource.type === 'list' || resource.type === 'gallery') {
     return { ...resource, databaseId, dataSourceId, type: resource.type, propertyIds };
   }
+  if (resource.type === 'chart') return {
+    ...resource, databaseId, dataSourceId, type: 'chart', propertyIds,
+    chartType: resource.chartType ?? 'bar',
+    groupPropertyId: resource.groupPropertyId,
+    valuePropertyId: resource.valuePropertyId,
+    aggregation: resource.aggregation ?? 'count',
+  };
   const datePropertyId = resource.datePropertyId ?? schema.properties.find((property) => property.type === 'date')?.id;
   if (!datePropertyId) return null;
   if (resource.type === 'timeline') return {
@@ -172,6 +211,13 @@ function writeResource(map: YMap<unknown>, resource: WorkspaceResource): void {
   } else if (resource.type === 'timeline') {
     map.set('datePropertyId', resource.datePropertyId);
     map.set('timezone', resource.timezone);
+  } else if (resource.type === 'chart') {
+    map.set('chartType', resource.chartType);
+    map.set('aggregation', resource.aggregation);
+    if (resource.groupPropertyId) map.set('groupPropertyId', resource.groupPropertyId);
+    else map.delete('groupPropertyId');
+    if (resource.valuePropertyId) map.set('valuePropertyId', resource.valuePropertyId);
+    else map.delete('valuePropertyId');
   }
   map.delete('pageIds');
 }
@@ -213,6 +259,14 @@ function readStoredResource(id: string, map: YMap<unknown>, databaseId: string, 
       ...base, type, datePropertyId, timezone: String(map.get('timezone') ?? DEFAULT_TIMEZONE),
     } : null;
   }
+  if (type === 'chart') return {
+    ...base,
+    type,
+    chartType: (map.get('chartType') as ChartResource['chartType']) ?? 'bar',
+    groupPropertyId: typeof map.get('groupPropertyId') === 'string' ? map.get('groupPropertyId') as string : undefined,
+    valuePropertyId: typeof map.get('valuePropertyId') === 'string' ? map.get('valuePropertyId') as string : undefined,
+    aggregation: (map.get('aggregation') as ChartResource['aggregation']) ?? 'count',
+  };
   if (type === 'table' || type === 'list' || type === 'gallery') return { ...base, type };
   return null;
 }
@@ -393,6 +447,7 @@ export class WorkspaceYjsStore {
       definitionOrder: legacyDocument.getArray<string>('schema-order'),
       pages: legacyDocument.getMap<YMap<unknown>>('pages'),
       pageOrder: legacyDocument.getArray<string>('page-order'),
+      pageLayout: legacyDocument.getMap<unknown>('page-layout'),
       onTransaction: () => undefined,
     };
     const legacyState = legacyRoom.definitions.size || legacyRoom.pages.size
@@ -456,6 +511,7 @@ export class WorkspaceYjsStore {
         definitionOrder: legacyDocument.getArray<string>('schema-order'),
         pages: legacyDocument.getMap<YMap<unknown>>('pages'),
         pageOrder: legacyDocument.getArray<string>('page-order'),
+        pageLayout: legacyDocument.getMap<unknown>('page-layout'),
         onTransaction: () => undefined,
       };
       const relatedViews = seedResources.filter((resource) => resource.dataSourceId === reference.id || resource.databaseId === reference.id);
@@ -519,6 +575,10 @@ export class WorkspaceYjsStore {
     if (reference.type === 'table' || reference.type === 'list' || reference.type === 'gallery') return {
       id: reference.id, databaseId, dataSourceId, type: reference.type, title: reference.type,
       pageIds: [], propertyIds: schema.properties.map((property) => property.id),
+    };
+    if (reference.type === 'chart') return {
+      id: reference.id, databaseId, dataSourceId, type: 'chart', title: 'Grafico', pageIds: [],
+      propertyIds: schema.properties.map((property) => property.id), chartType: 'bar', aggregation: 'count',
     };
     const date = schema.properties.find((property) => property.type === 'date');
     if (reference.type === 'timeline') return {
@@ -596,6 +656,7 @@ export class WorkspaceYjsStore {
       return this.ownedPageIds(room).map((pageId) => [pageId, dataSourceSchema]);
     }));
     const dataSourceSchemas = Object.fromEntries(rooms.map((room) => [room.id, roomSchema(room)]));
+    const dataSourceLayouts = Object.fromEntries(rooms.map((room) => [room.id, readPageLayout(room)]));
     const pages = materializeComputedProperties(rawPages, pageSchemas);
     const ownership = Object.fromEntries([...this.pageOwnership.entries()].flatMap(([pageId, value]) => {
       const parsed = safeJson<PageOwnership>(value);
@@ -610,7 +671,7 @@ export class WorkspaceYjsStore {
       };
     });
     return {
-      pages, resources: this.readResources(), pageSchemas, dataSourceSchemas,
+      pages, resources: this.readResources(), pageSchemas, dataSourceSchemas, dataSourceLayouts,
       databases, dataSources: this.readDataSourceReferences(), ownership,
       moveOperations: [...this.moveOperations.values()].flatMap((value) => {
         const operation = safeJson<MoveOperation>(value);
@@ -698,10 +759,14 @@ export class WorkspaceYjsStore {
       definitionOrder: document.getArray<string>('schema-order'),
       pages: document.getMap<YMap<unknown>>('pages'),
       pageOrder: document.getArray<string>('page-order'),
+      pageLayout: document.getMap<unknown>('page-layout'),
       onTransaction: () => this.publish(),
     };
     this.dataSourceRooms.set(id, room);
     if (seed && !room.definitions.size && !room.pages.size) replaceDataSource(room, seed);
+    if (!room.pageLayout.has('value')) room.document.transact(() => {
+      room.pageLayout.set('value', JSON.stringify(defaultPageLayout(seed?.schema ?? roomSchema(room))));
+    }, 'page-layout-seed');
     document.on('afterTransaction', room.onTransaction);
     this.ensureDatabaseRoom(databaseId, title, id);
     this.workspaceDocument.transact(() => {
@@ -811,6 +876,7 @@ export class WorkspaceYjsStore {
           archived.delete(definition.id);
         });
       });
+      room.pageLayout.set('value', JSON.stringify(readPageLayout(room)));
     }, 'schema-change');
     this.resourceRooms.forEach((view, viewId) => {
       const reference = this.readReferences().find((item) => item.id === viewId);
@@ -849,6 +915,12 @@ export class WorkspaceYjsStore {
       const index = source.pageOrder.toArray().indexOf(pageId);
       if (index >= 0) source.pageOrder.delete(index, 1);
     }, 'page-properties-detach-standalone');
+  }
+
+  updateDataSourceLayout(dataSourceId: string, layout: DatabasePageLayout): void {
+    const room = this.dataSourceRooms.get(dataSourceId);
+    if (!room) return;
+    room.document.transact(() => room.pageLayout.set('value', JSON.stringify(layout)), 'page-layout-change');
   }
 
   insertPage(page: NotionPageData, afterPageId?: string, dataSourceId = 'standalone'): void {
@@ -1120,7 +1192,11 @@ export class WorkspaceYjsStore {
     if (!room) return;
     room.document.transact(() => {
       Object.entries(patch).forEach(([key, value]) => {
-        if (key === 'id' || key === 'type' || key === 'pageIds' || value === undefined) return;
+        if (key === 'id' || key === 'type' || key === 'pageIds') return;
+        if (value === undefined) {
+          if (['filter', 'sorts', 'group', 'subgroup', 'projection', 'groupPropertyId', 'valuePropertyId'].includes(key)) room.resource.delete(key);
+          return;
+        }
         const current = room.resource.get(key);
         if (key === 'propertyIds' && current instanceof YArray && Array.isArray(value)) replaceArray(current, value as string[]);
         else if (['filter', 'sorts', 'group', 'subgroup', 'projection'].includes(key)) {

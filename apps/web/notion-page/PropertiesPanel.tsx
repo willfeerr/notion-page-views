@@ -16,11 +16,12 @@ import {
 } from 'lucide-react';
 import type {
   BoardLinkOption, BoardLinkValue, NotionSchema, PageProperties, PropertyDefinition,
-  PersonOption, PropertyType, RelationTargetOption, SelectOption, StoredPropertyValue,
+  DatabasePageLayout, PersonOption, PropertyType, RelationTargetOption, SelectOption, StoredPropertyValue,
 } from './types';
 import { PROPERTY_ICONS, PROPERTY_TYPE_LABELS } from './propertyTokens';
 import { PropertyField } from './fields/PropertyField';
 import { Popover } from './fields/Popover';
+import { PageLayoutSettings } from './PageLayoutSettings';
 
 interface PropertiesPanelProps {
   schema: NotionSchema;
@@ -32,6 +33,8 @@ interface PropertiesPanelProps {
   boardPlacement?: BoardLinkValue | null;
   onBoardPlacementChange?: (placement: BoardLinkValue | null) => void;
   relationTargets?: RelationTargetOption[];
+  layout?: DatabasePageLayout;
+  onLayoutChange?: (layout: DatabasePageLayout) => void;
   // schema passed here for context (not used directly — parent owns state)
 }
 
@@ -248,7 +251,7 @@ function SortablePropertyRow({
 export function PropertiesPanel({
   schema, properties, locale, onChange, onSchemaChange,
   boardOptions = [], boardPlacement, onBoardPlacementChange,
-  relationTargets = [],
+  relationTargets = [], layout, onLayoutChange,
 }: PropertiesPanelProps) {
   const [showHidden, setShowHidden] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -291,7 +294,25 @@ export function PropertiesPanel({
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    if (!over || active.id === over.id || !onSchemaChange) return;
+    if (!over || active.id === over.id || (!onSchemaChange && !onLayoutChange)) return;
+    if (layout && onLayoutChange) {
+      const activeId = String(active.id);
+      const overId = String(over.id);
+      const targetPinned = layout.pinnedPropertyIds.includes(overId);
+      const targetSection = layout.sections.find((section) => section.propertyIds.includes(overId));
+      if (!targetPinned && !targetSection) return;
+      const pinnedPropertyIds = layout.pinnedPropertyIds.filter((id) => id !== activeId);
+      const sections = layout.sections.map((section) => ({ ...section, propertyIds: section.propertyIds.filter((id) => id !== activeId) }));
+      if (targetPinned) {
+        if (pinnedPropertyIds.length >= 4) return;
+        pinnedPropertyIds.splice(Math.max(0, pinnedPropertyIds.indexOf(overId)), 0, activeId);
+      } else if (targetSection) {
+        const section = sections.find((item) => item.id === targetSection.id)!;
+        section.propertyIds.splice(Math.max(0, section.propertyIds.indexOf(overId)), 0, activeId);
+      }
+      onLayoutChange({ pinnedPropertyIds, sections });
+      return;
+    }
     const oldIdx = schema.properties.findIndex((p) => p.id === active.id);
     const newIdx = schema.properties.findIndex((p) => p.id === over.id);
     if (oldIdx === -1 || newIdx === -1) return;
@@ -418,36 +439,50 @@ export function PropertiesPanel({
 
   const sortableIds = visibleProps.map((p) => p.id);
 
+  function renderProperty(definition: PropertyDefinition) {
+    return <SortablePropertyRow
+      key={definition.id}
+      definition={definition}
+      properties={properties}
+      locale={locale}
+      renamingId={renamingId}
+      renameDraft={renameDraft}
+      readOnly={readOnly}
+      onChange={onChange}
+      onSchemaChange={onSchemaChange}
+      onStartRename={(id, name) => { setRenamingId(id); setRenameDraft(name); }}
+      onFinishRename={finishRename}
+      onCancelRename={() => setRenamingId(null)}
+      onRenameDraftChange={setRenameDraft}
+      onDelete={deleteProperty}
+      onChangeType={changeType}
+      onCreateOption={handleCreateOption}
+      onUpdateOption={handleUpdateOption}
+      onDeleteOption={handleDeleteOption}
+      relationTargets={relationTargets}
+      onRelationTargetChange={changeRelationTarget}
+    />;
+  }
+
+  const visibleById = new Map(visibleProps.map((definition) => [definition.id, definition]));
+  const pinned = layout?.pinnedPropertyIds.flatMap((id) => visibleById.get(id) ?? []) ?? [];
+  const sections = layout?.sections.map((section) => ({
+    ...section,
+    properties: section.propertyIds.flatMap((id) => visibleById.get(id) ?? []),
+  })) ?? [];
+
   return (
     <div className="npc-properties-panel">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-          {visibleProps.map((definition) => (
-            <SortablePropertyRow
-              key={definition.id}
-              definition={definition}
-              properties={properties}
-              locale={locale}
-              renamingId={renamingId}
-              renameDraft={renameDraft}
-              readOnly={readOnly}
-              onChange={onChange}
-              onSchemaChange={onSchemaChange}
-              onStartRename={(id, name) => { setRenamingId(id); setRenameDraft(name); }}
-              onFinishRename={finishRename}
-              onCancelRename={() => setRenamingId(null)}
-              onRenameDraftChange={setRenameDraft}
-              onDelete={deleteProperty}
-              onChangeType={changeType}
-              onCreateOption={handleCreateOption}
-              onUpdateOption={handleUpdateOption}
-              onDeleteOption={handleDeleteOption}
-              relationTargets={relationTargets}
-              onRelationTargetChange={changeRelationTarget}
-            />
-          ))}
+          {layout ? <>
+            {pinned.length ? <section className="npc-property-section is-pinned"><header><strong>Fixadas</strong></header>{pinned.map(renderProperty)}</section> : null}
+            {sections.map((section) => <section key={section.id} className="npc-property-section"><header><button type="button" onClick={() => onLayoutChange?.({ ...layout, sections: layout.sections.map((item) => item.id === section.id ? { ...item, collapsed: !item.collapsed } : item) })}>{section.collapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}<strong>{section.title || 'Sem título'}</strong><span>{section.properties.length}</span></button></header>{section.collapsed ? null : section.properties.map(renderProperty)}</section>)}
+          </> : visibleProps.map(renderProperty)}
         </SortableContext>
       </DndContext>
+
+      {layout && onLayoutChange ? <PageLayoutSettings schema={schema} layout={layout} onChange={onLayoutChange} /> : null}
 
       {(boardPlacement || editingBoardLink) && canManageBoardLink ? (
         <div className="npc-board-link-row">
