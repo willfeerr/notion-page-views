@@ -26,7 +26,7 @@ turbo.json      # pipeline de build, testes e desenvolvimento
 
 ## Preview
 
-https://willfeerr.github.io/notion-page-views/
+https://willfeerr.github.io/notion-page-views/?v=55b5973
 
 ## Desenvolvimento
 
