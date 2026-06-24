@@ -763,8 +763,8 @@ export default function App() {
               boardPlacement={boardPlacement}
               onBoardPlacementChange={updateBoardPlacement}
               relationTargets={relationTargets}
-              layout={openPageDataSourceId ? dataSourceLayouts[openPageDataSourceId] : undefined}
-              onLayoutChange={openPageDataSourceId ? (layout) => workspaceStoreRef.current?.updateDataSourceLayout(openPageDataSourceId, layout) : undefined}
+              layout={openPageResource ? dataSourceLayouts[openPageResource.dataSourceId] : undefined}
+              onLayoutChange={openPageResource ? (layout) => workspaceStoreRef.current?.updateDataSourceLayout(openPageResource.dataSourceId, layout) : undefined}
               onEditingLocationChange={setEditingLocation}
             />
           </section>
