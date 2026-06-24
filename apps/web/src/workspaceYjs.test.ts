@@ -7,13 +7,20 @@ import { WorkspaceYjsStore } from './workspaceYjs';
 function createStore(onRoom?: (room: string) => void, persisted: Map<string, Doc> = new Map()) {
   return new WorkspaceYjsStore((room, document) => {
     onRoom?.(room);
-    const source = persisted.get(room) ?? new Doc();
+    const source = persisted.get(room) ?? persisted.get(legacyRoomName(room)) ?? new Doc();
     persisted.set(room, source);
     applyUpdate(document, encodeStateAsUpdate(source));
     const persist = (update: Uint8Array) => applyUpdate(source, update);
     document.on('update', persist);
     return { destroy() { document.off('update', persist); } };
   });
+}
+
+function legacyRoomName(room: string): string | undefined {
+  if (room === 'workspace:notion-pages-lab:v2') return 'workspace:notion-pages-lab';
+  if (room.startsWith('view:') && room.endsWith(':v2')) return room.slice(0, -3);
+  if (room.startsWith('page:') && room.endsWith(':v2')) return room.slice(0, -3).replace(/^page:/, 'page-');
+  return undefined;
 }
 
 function createLegacyDataSource(sourceSchema: NotionSchema, sourcePages: NotionPageData[]): Doc {
@@ -326,11 +333,11 @@ describe('WorkspaceYjsStore', () => {
     const rooms: string[] = [];
     const store = createStore((room) => rooms.push(room));
     store.initialize({ schema, pages: [page] });
-    expect(rooms).toContain('workspace:notion-pages-lab');
+    expect(rooms).toContain('workspace:notion-pages-lab:v2');
     expect(rooms).toContain('database:roadmap:v1');
     expect(rooms).toContain('datasource:roadmap:v1');
-    expect(rooms).toContain('view:board-roadmap');
-    expect(rooms).toContain('view:calendar-product');
+    expect(rooms).toContain('view:board-roadmap:v2');
+    expect(rooms).toContain('view:calendar-product:v2');
   });
 
   it('keeps two views on one data source sharing rows but not view configuration', () => {

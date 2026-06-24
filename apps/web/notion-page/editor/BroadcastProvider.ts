@@ -12,6 +12,7 @@ type Message =
 export class BroadcastProvider {
   readonly awareness: Awareness;
   private readonly storageKey: string;
+  private readonly storageKeys: string[];
   private channel: BroadcastChannel | null = null;
   private listeners = new Map<string, Set<Listener>>();
   private connected = false;
@@ -21,6 +22,7 @@ export class BroadcastProvider {
 
   constructor(readonly name: string, readonly document: Doc) {
     this.storageKey = `notion-yjs:${name}`;
+    this.storageKeys = [this.storageKey, ...legacyStorageKeys(name).map((key) => `notion-yjs:${key}`)];
     this.restore();
     this.awareness = new Awareness(document);
     this.connect();
@@ -29,7 +31,7 @@ export class BroadcastProvider {
   private restore(): void {
     if (typeof localStorage === 'undefined') return;
     try {
-      const encoded = localStorage.getItem(this.storageKey);
+      const encoded = this.storageKeys.map((key) => localStorage.getItem(key)).find((value): value is string => Boolean(value));
       if (!encoded) return;
       const binary = atob(encoded);
       const update = Uint8Array.from(binary, (character) => character.charCodeAt(0));
@@ -46,6 +48,7 @@ export class BroadcastProvider {
       let binary = '';
       for (const byte of update) binary += String.fromCharCode(byte);
       localStorage.setItem(this.storageKey, btoa(binary));
+      this.storageKeys.slice(1).forEach((key) => { try { localStorage.removeItem(key); } catch { /* ignore */ } });
     } catch {
       // Storage can be unavailable or full; live BroadcastChannel sync still works.
     }
@@ -137,4 +140,11 @@ export class BroadcastProvider {
   private emit(event: string, ...args: unknown[]): void {
     this.listeners.get(event)?.forEach((listener) => listener(...args));
   }
+}
+
+function legacyStorageKeys(name: string): string[] {
+  if (name === 'workspace:notion-pages-lab:v2') return ['workspace:notion-pages-lab'];
+  if (name.startsWith('view:') && name.endsWith(':v2')) return [name.slice(0, -3)];
+  if (name.startsWith('page:') && name.endsWith(':v2')) return [name.slice(0, -3).replace(/^page:/, 'page-')];
+  return [];
 }

@@ -6,12 +6,12 @@ The workspace uses separate Yjs documents for navigation, database containers, d
 
 | Room | Canonical data | Excludes |
 |---|---|---|
-| `workspace:{workspaceId}` | Ordered container/data-source/view references, navigation and canonical `pageId -> dataSourceId` ownership | Schemas, rows, view configuration, page content |
+| `workspace:{workspaceId}:v2` | Ordered container/data-source/view references, navigation and canonical `pageId -> dataSourceId` ownership | Schemas, rows, view configuration, page content |
 | `operations:{workspaceId}:v1` | Durable move journal, source snapshots, property mappings and saga phases | Canonical ownership and live rows |
 | `database:{databaseId}:v1` | Container metadata plus ordered data-source and view references | Property schema, rows and page content |
 | `datasource:{dataSourceId}:v1` | Property definitions, rows, property values and per-view ranks | View filters/layout and Lexical content |
-| `view:{viewId}` | `databaseId`, `dataSourceId`, view type, grouping/date property, visible properties and presentation settings | Row membership and page content |
-| `page-{pageId}` | Lexical/Yjs content and awareness | Database schema and other pages |
+| `view:{viewId}:v2` | `databaseId`, `dataSourceId`, view type, grouping/date property, visible properties and presentation settings | Row membership and page content |
+| `page:{pageId}:v2` | Lexical/Yjs content and awareness | Database schema and other pages |
 
 The legacy `database:roadmap` and `database:{id}:v2` rooms are read only during migration. New row and schema writes use `datasource:{id}:v1`; the old rooms remain available for recovery.
 
