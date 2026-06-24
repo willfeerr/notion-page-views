@@ -2,7 +2,7 @@ name: Deploy GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'codex/**']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -13,7 +13,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -39,7 +39,9 @@ jobs:
 
   deploy:
     needs: build
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: >-
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/stabilization-v3')) ||
+      (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/stabilization-v3'))
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
