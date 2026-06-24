@@ -1,6 +1,6 @@
 import {
   Type, Hash, ChevronDown, Tags, CircleDot, Calendar, User, CheckSquare,
-  Link2, AtSign, Phone, Clock, type LucideIcon,
+  Link2, AtSign, Phone, Clock, Network, type LucideIcon,
 } from 'lucide-react';
 import type { PropertyColor, PropertyType } from './types';
 
@@ -23,12 +23,14 @@ export const PROPERTY_ICONS: Record<PropertyType, LucideIcon> = {
   text: Type, number: Hash, select: ChevronDown, multi_select: Tags,
   status: CircleDot, date: Calendar, person: User, checkbox: CheckSquare,
   url: Link2, email: AtSign, phone: Phone, created_time: Clock, last_edited_time: Clock,
+  relation: Network,
 };
 
 export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
   text: 'Texto', number: 'Número', select: 'Select', multi_select: 'Multi-select',
   status: 'Status', date: 'Data', person: 'Pessoa', checkbox: 'Checkbox',
   url: 'URL', email: 'E-mail', phone: 'Telefone', created_time: 'Criado em', last_edited_time: 'Editado em',
+  relation: 'Relação',
 };
 
 const AVATAR_PALETTE: PropertyColor[] = ['blue','green','orange','purple','pink','red','brown','yellow'];

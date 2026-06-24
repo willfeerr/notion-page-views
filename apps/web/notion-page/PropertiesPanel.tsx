@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import type {
   BoardLinkOption, BoardLinkValue, NotionSchema, PageProperties, PropertyDefinition,
-  PersonOption, PropertyType, SelectOption, StoredPropertyValue,
+  PersonOption, PropertyType, RelationTargetOption, SelectOption, StoredPropertyValue,
 } from './types';
 import { PROPERTY_ICONS, PROPERTY_TYPE_LABELS } from './propertyTokens';
 import { PropertyField } from './fields/PropertyField';
@@ -31,6 +31,7 @@ interface PropertiesPanelProps {
   boardOptions?: BoardLinkOption[];
   boardPlacement?: BoardLinkValue | null;
   onBoardPlacementChange?: (placement: BoardLinkValue | null) => void;
+  relationTargets?: RelationTargetOption[];
   // schema passed here for context (not used directly — parent owns state)
 }
 
@@ -44,14 +45,14 @@ const ALWAYS_SHOW_TYPES: PropertyType[] = ['checkbox', 'created_time', 'last_edi
 
 const ADDABLE_TYPES: PropertyType[] = [
   'text','number','select','multi_select','status','date','person',
-  'checkbox','url','email','phone',
+  'checkbox','url','email','phone','relation',
 ];
 
 function createId(prefix: string): string {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
 }
 
-function buildNewProperty(type: PropertyType, people: PersonOption[] = []): PropertyDefinition {
+function buildNewProperty(type: PropertyType, people: PersonOption[] = [], relationTargetId = ''): PropertyDefinition {
   const id = createId('prop');
   switch (type) {
     case 'select':
@@ -79,6 +80,8 @@ function buildNewProperty(type: PropertyType, people: PersonOption[] = []): Prop
       return { id, name: 'Pessoa', type, people, multiple: true };
     case 'date':
       return { id, name: 'Data', type, includeTime: true, timezone: 'America/Sao_Paulo' };
+    case 'relation':
+      return { id, name: 'Relação', type, targetDataSourceId: relationTargetId, multiple: true };
     default:
       return { id, name: PROPERTY_TYPE_LABELS[type] ?? type, type } as PropertyDefinition;
   }
@@ -105,6 +108,8 @@ interface SortableRowProps {
   onCreateOption: (propId: string, opt: SelectOption) => void;
   onUpdateOption: (propId: string, opt: SelectOption) => void;
   onDeleteOption: (propId: string, optionId: string) => void;
+  relationTargets: RelationTargetOption[];
+  onRelationTargetChange: (propertyId: string, targetDataSourceId: string) => void;
 }
 
 function SortablePropertyRow({
@@ -112,6 +117,7 @@ function SortablePropertyRow({
   readOnly, onChange,
   onStartRename, onFinishRename, onCancelRename, onRenameDraftChange,
   onDelete, onChangeType, onCreateOption, onUpdateOption, onDeleteOption,
+  relationTargets, onRelationTargetChange,
 }: SortableRowProps) {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
@@ -213,6 +219,12 @@ function SortablePropertyRow({
       </div>
 
       <div className="npc-property-value-cell">
+        {definition.type === 'relation' && !readOnly && relationTargets.length > 0 ? (
+          <select className="npc-relation-target" aria-label="Data Source relacionado" value={definition.targetDataSourceId}
+            onChange={(event) => onRelationTargetChange(definition.id, event.target.value)}>
+            {relationTargets.map((target) => <option key={target.id} value={target.id}>{target.title}</option>)}
+          </select>
+        ) : null}
         <PropertyField
           definition={definition}
           value={properties[definition.id]}
@@ -221,6 +233,9 @@ function SortablePropertyRow({
           onCreateOption={(opt) => onCreateOption(definition.id, opt)}
           onUpdateOption={(opt) => onUpdateOption(definition.id, opt)}
           onDeleteOption={(optionId) => onDeleteOption(definition.id, optionId)}
+          relationOptions={definition.type === 'relation'
+            ? relationTargets.find((target) => target.id === definition.targetDataSourceId)?.pages ?? []
+            : undefined}
         />
       </div>
     </div>
@@ -231,6 +246,7 @@ function SortablePropertyRow({
 export function PropertiesPanel({
   schema, properties, locale, onChange, onSchemaChange,
   boardOptions = [], boardPlacement, onBoardPlacementChange,
+  relationTargets = [],
 }: PropertiesPanelProps) {
   const [showHidden, setShowHidden] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -302,7 +318,7 @@ export function PropertiesPanel({
       ...schema,
       properties: schema.properties.map((p) => {
         if (p.id !== id) return p;
-        const base = buildNewProperty(newType, availablePeople);
+        const base = buildNewProperty(newType, availablePeople, relationTargets[0]?.id ?? '');
         return { ...base, id: p.id, name: p.name };
       }),
     });
@@ -310,7 +326,7 @@ export function PropertiesPanel({
 
   function addProperty(type: PropertyType) {
     if (!onSchemaChange) return;
-    const prop = buildNewProperty(type, availablePeople);
+    const prop = buildNewProperty(type, availablePeople, relationTargets[0]?.id ?? '');
     onSchemaChange({ ...schema, properties: [...schema.properties, prop] });
     setShowHidden(true);
     setRenamingId(prop.id);
@@ -377,6 +393,17 @@ export function PropertiesPanel({
     });
   }
 
+  function changeRelationTarget(propertyId: string, targetDataSourceId: string) {
+    if (!onSchemaChange) return;
+    onSchemaChange({
+      ...schema,
+      properties: schema.properties.map((property) => property.id === propertyId && property.type === 'relation'
+        ? { ...property, targetDataSourceId }
+        : property),
+    });
+    onChange?.(propertyId, []);
+  }
+
   const visibleProps = schema.properties.filter((p) => {
     if (ALWAYS_SHOW_TYPES.includes(p.type)) return true;
     return showHidden || !isEmptyValue(properties[p.id]);
@@ -413,6 +440,8 @@ export function PropertiesPanel({
               onCreateOption={handleCreateOption}
               onUpdateOption={handleUpdateOption}
               onDeleteOption={handleDeleteOption}
+              relationTargets={relationTargets}
+              onRelationTargetChange={changeRelationTarget}
             />
           ))}
         </SortableContext>

@@ -131,6 +131,7 @@ export function buildProperty(type: PropertyType, name?: string, people: PersonO
   }
   if (type === 'person') return { id, name: name ?? 'Pessoa', type, people, multiple: true };
   if (type === 'date') return { id, name: name ?? 'Data', type, includeTime: true, timezone: DEFAULT_TIMEZONE };
+  if (type === 'relation') return { id, name: name ?? 'Relação', type, targetDataSourceId: 'standalone', multiple: true };
   return { id, name: name ?? type, type } as PropertyDefinition;
 }
 
@@ -144,7 +145,7 @@ export function buildInitialDataSourceProperties(primary: PropertyDefinition): P
 
 export function emptyValueFor(definition: PropertyDefinition): StoredPropertyValue {
   if (definition.type === 'checkbox') return false;
-  if (definition.type === 'multi_select' || definition.type === 'person') return [];
+  if (definition.type === 'multi_select' || definition.type === 'person' || definition.type === 'relation') return [];
   return null;
 }
 
@@ -172,6 +173,7 @@ export function convertPropertyValue(
       return value.find((id) => definition.options.some((option) => option.id === id)) ?? null;
     }
     if (definition.type === 'date') return normalizeDateValue(value, definition.timezone) ?? null;
+    if (definition.type === 'relation') return Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
     return emptyValueFor(definition);
   }
   if (definition.type === 'select' || definition.type === 'status') {
@@ -186,6 +188,7 @@ export function convertPropertyValue(
     const selected = Array.isArray(value) ? value.filter((id) => validIds.has(id)) : [];
     return definition.multiple === false ? selected.slice(0, 1) : selected;
   }
+  if (definition.type === 'relation') return Array.isArray(value) ? value : [];
   if (definition.type === 'checkbox') return Boolean(value);
   if (definition.type === 'number') return typeof value === 'number' ? value : null;
   if (definition.type === 'date') return normalizeDateValue(value, definition.timezone);

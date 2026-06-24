@@ -54,6 +54,10 @@ The one-time `audit-properties-v1` repair restores legacy Created time and Last 
 
 Standalone pages have no database properties. They must be moved into a database before receiving Status, Date, Person or other database fields.
 
+A Relation definition stores its `targetDataSourceId`; row values contain only referenced page IDs. Updating a
+relation filters IDs against canonical target ownership and never changes either page's ownership. Deleting a
+target page removes its ID from relation values in every loaded data source.
+
 Selecting a different board grouping property changes only the view configuration. Rows without a valid value render in the synthetic `Sem status` lane; the application does not silently rewrite them.
 
 ## Creation protocol

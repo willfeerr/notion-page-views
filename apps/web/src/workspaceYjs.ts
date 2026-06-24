@@ -1152,6 +1152,20 @@ export class WorkspaceYjsStore {
       if (index >= 0) room.pageOrder.delete(index, 1);
     }, 'page-delete');
     this.workspaceDocument.transact(() => this.pageOwnership.delete(pageId), 'page-delete-ownership');
+    this.dataSourceRooms.forEach((candidate) => {
+      const relationIds = roomSchema(candidate).properties
+        .filter((definition) => definition.type === 'relation')
+        .map((definition) => definition.id);
+      if (!relationIds.length) return;
+      candidate.document.transact(() => candidate.pages.forEach((candidatePage) => {
+        const properties = candidatePage.get('properties');
+        if (!(properties instanceof YMap)) return;
+        relationIds.forEach((propertyId) => {
+          const value = properties.get(propertyId);
+          if (Array.isArray(value) && value.includes(pageId)) properties.set(propertyId, value.filter((id) => id !== pageId));
+        });
+      }), 'relation-target-delete');
+    });
   }
 
   updatePage(id: string, patch: Partial<NotionPageData>): void {
@@ -1194,8 +1208,12 @@ export class WorkspaceYjsStore {
     const page = room?.pages.get(pageId);
     const properties = page?.get('properties');
     if (!room || !(page instanceof YMap) || !(properties instanceof YMap)) return;
+    const definition = roomSchema(room).properties.find((candidate) => candidate.id === propertyId);
+    const validated = definition?.type === 'relation'
+      ? (Array.isArray(value) ? value : []).filter((relatedPageId) => this.readOwnership(relatedPageId)?.dataSourceId === definition.targetDataSourceId)
+      : value;
     room.document.transact(() => {
-      if (!valuesEqual(properties.get(propertyId), value)) properties.set(propertyId, value);
+      if (!valuesEqual(properties.get(propertyId), validated)) properties.set(propertyId, validated);
       page.set('lastEditedTime', new Date().toISOString());
     }, 'property-change');
   }

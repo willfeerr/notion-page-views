@@ -6,7 +6,7 @@ import type { SerializedEditorState } from 'lexical';
 import { NotionEditor, NotionPageCard, NotionPageView } from '../notion-page';
 import { PropertiesPanel } from '../notion-page/PropertiesPanel';
 import { samplePages, sampleSchema } from '../notion-page/example/sampleData';
-import type { BoardLinkOption, BoardLinkValue, CollabPresence, NotionPageData, NotionSchema, StoredPropertyValue } from '../notion-page/types';
+import type { BoardLinkOption, BoardLinkValue, CollabPresence, NotionPageData, NotionSchema, RelationTargetOption, StoredPropertyValue } from '../notion-page/types';
 import { BroadcastProvider } from '../notion-page/editor/BroadcastProvider';
 import { CalendarView } from './CalendarView';
 import { WorkspaceYjsStore } from './workspaceYjs';
@@ -161,6 +161,15 @@ export default function App() {
       lanes: grouping.options.map((option) => ({ id: option.id, name: option.name, color: option.color })),
     }];
   });
+  const relationTargets: RelationTargetOption[] = [...new Map(resources.map((resource) => [resource.dataSourceId, resource])).values()]
+    .map((resource) => ({
+      id: resource.dataSourceId,
+      title: resource.title,
+      pages: resource.pageIds.flatMap((pageId) => {
+        const related = pages.find((page) => page.id === pageId);
+        return related ? [{ id: related.id, title: related.title || 'Sem titulo', icon: related.icon }] : [];
+      }),
+    }));
   const boardPlacement: BoardLinkValue | null = openPage && openPageBoard
     ? {
         boardId: openPageBoard.id,
@@ -641,6 +650,7 @@ export default function App() {
               boardOptions={boardOptions}
               boardPlacement={boardPlacement}
               onBoardPlacementChange={updateBoardPlacement}
+              relationTargets={relationTargets}
               onEditingLocationChange={setEditingLocation}
             />
           </section>

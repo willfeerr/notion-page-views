@@ -231,6 +231,30 @@ describe('WorkspaceYjsStore', () => {
     expect(store.read().ownership?.['page-1'].dataSourceId).toBe('other-source');
   });
 
+  it('stores relations without moving pages and removes dangling references', () => {
+    const store = createStore();
+    store.initialize({ schema, pages: [page] });
+    const targetStatus = { id: 'target-status', name: 'Status', type: 'status' as const, options: [], groups: [] };
+    store.createResource({
+      id: 'relation-target-board', databaseId: 'relation-target-db', dataSourceId: 'relation-target',
+      type: 'board', title: 'Relation target', pageIds: [], propertyIds: [targetStatus.id], statusPropertyId: targetStatus.id,
+    }, [targetStatus]);
+    store.insertPage({ ...page, id: 'related-page', title: 'Related', properties: {} }, undefined, 'relation-target');
+    store.applySchema('roadmap', {
+      properties: [...schema.properties, {
+        id: 'relation', name: 'Related page', type: 'relation', targetDataSourceId: 'relation-target', multiple: true,
+      }],
+    });
+
+    store.updateProperty('page-1', 'relation', ['related-page', 'missing-page']);
+    expect(store.read().pages.find((item) => item.id === 'page-1')?.properties.relation).toEqual(['related-page']);
+    expect(store.read().ownership?.['page-1'].dataSourceId).toBe('roadmap');
+    expect(store.read().ownership?.['related-page'].dataSourceId).toBe('relation-target');
+
+    store.deletePage('related-page');
+    expect(store.read().pages.find((item) => item.id === 'page-1')?.properties.relation).toEqual([]);
+  });
+
   it('keeps pages and schemas isolated between newly created databases', () => {
     const store = createStore();
     store.initialize({ schema, pages: [page] });

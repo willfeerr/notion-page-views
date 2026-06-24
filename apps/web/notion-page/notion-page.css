@@ -1782,6 +1782,22 @@
    ═══════════════════════════════════════════════════════════════ */
 .npc-menu-arrow { margin-left: auto; opacity: 0.5; }
 
+/* Relation property */
+.npc-relation-target {
+  max-width: 150px; min-width: 0; border: 1px solid var(--npc-border); border-radius: 4px;
+  background: var(--npc-bg); color: var(--npc-text-secondary); padding: 4px 6px; font-size: 11px;
+}
+.npc-relation-pill, .npc-relation-compact {
+  display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 220px;
+  border-radius: 4px; background: var(--npc-hover-bg); color: var(--npc-text); padding: 3px 6px; font-size: 12px;
+}
+.npc-relation-pill > span:nth-child(2), .npc-relation-compact > span:last-of-type {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.npc-relation-pill button { border: 0; background: none; color: var(--npc-text-secondary); padding: 0; display: grid; place-items: center; }
+.npc-relation-compact b { font-size: 10px; color: var(--npc-text-secondary); }
+.npc-options-empty { display: block; padding: 10px; color: var(--npc-text-secondary); font-size: 12px; }
+
 /* ═══════════════════════════════════════════════════════════════
    COLLABORATION CURSORS (Lexical awareness API)
    ═══════════════════════════════════════════════════════════════ */

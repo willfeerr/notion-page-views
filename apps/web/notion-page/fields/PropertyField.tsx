@@ -1,6 +1,6 @@
 'use client';
 
-import type { DateRangeValue, PropertyDefinition, SelectOption, StoredPropertyValue } from '../types';
+import type { DateRangeValue, PropertyDefinition, RelationPageOption, SelectOption, StoredPropertyValue } from '../types';
 import { TextLikeField } from './TextLikeField';
 import { CheckboxField } from './CheckboxField';
 import { DateField } from './DateField';
@@ -8,6 +8,7 @@ import { SelectField } from './SelectField';
 import { MultiSelectField } from './MultiSelectField';
 import { PersonField } from './PersonField';
 import { TimestampField } from './TimestampField';
+import { RelationField } from './RelationField';
 
 interface PropertyFieldProps {
   definition: PropertyDefinition;
@@ -18,11 +19,12 @@ interface PropertyFieldProps {
   onCreateOption?: (option: SelectOption) => void;
   onUpdateOption?: (option: SelectOption) => void;
   onDeleteOption?: (optionId: string) => void;
+  relationOptions?: RelationPageOption[];
 }
 
 export function PropertyField({
   definition, value, compact = false, locale = 'pt-BR',
-  onChange, onCreateOption, onUpdateOption, onDeleteOption,
+  onChange, onCreateOption, onUpdateOption, onDeleteOption, relationOptions = [],
 }: PropertyFieldProps) {
   switch (definition.type) {
     case 'text':
@@ -68,6 +70,9 @@ export function PropertyField({
       return <PersonField people={definition.people}
         value={value as string[] | null | undefined} compact={compact}
         multiple={definition.multiple} onChange={(v) => onChange?.(v)} />;
+    case 'relation':
+      return <RelationField options={relationOptions} value={value as string[] | null | undefined}
+        compact={compact} multiple={definition.multiple} onChange={onChange ? (next) => onChange(next) : undefined} />;
     case 'created_time':
     case 'last_edited_time':
       return <TimestampField value={value as string | null | undefined} locale={locale} />;

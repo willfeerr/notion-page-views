@@ -11,7 +11,7 @@ export interface PersonOption { id: string; name: string; avatarUrl?: string; av
 export type PropertyType =
   | 'text' | 'number' | 'select' | 'multi_select' | 'status'
   | 'date' | 'person' | 'checkbox' | 'url' | 'email' | 'phone'
-  | 'created_time' | 'last_edited_time';
+  | 'relation' | 'created_time' | 'last_edited_time';
 
 interface PropertyDefinitionBase { id: string; name: string; type: PropertyType; }
 export interface TextPropertyDefinition extends PropertyDefinitionBase { type: 'text'; }
@@ -41,6 +41,14 @@ export interface EmailPropertyDefinition extends PropertyDefinitionBase { type: 
 export interface PhonePropertyDefinition extends PropertyDefinitionBase { type: 'phone'; }
 export interface CreatedTimePropertyDefinition extends PropertyDefinitionBase { type: 'created_time'; }
 export interface LastEditedTimePropertyDefinition extends PropertyDefinitionBase { type: 'last_edited_time'; }
+export interface RelationPropertyDefinition extends PropertyDefinitionBase {
+  type: 'relation';
+  targetDataSourceId: string;
+  multiple?: boolean;
+}
+
+export interface RelationPageOption { id: string; title: string; icon?: string | null; }
+export interface RelationTargetOption { id: string; title: string; pages: RelationPageOption[]; }
 
 export interface DateRangeValue {
   start: string;
@@ -54,7 +62,8 @@ export type PropertyDefinition =
   | SelectPropertyDefinition | MultiSelectPropertyDefinition | StatusPropertyDefinition
   | DatePropertyDefinition | PersonPropertyDefinition | CheckboxPropertyDefinition
   | UrlPropertyDefinition | EmailPropertyDefinition | PhonePropertyDefinition
-  | CreatedTimePropertyDefinition | LastEditedTimePropertyDefinition;
+  | CreatedTimePropertyDefinition | LastEditedTimePropertyDefinition
+  | RelationPropertyDefinition;
 
 export type StoredPropertyValue = string | number | boolean | string[] | DateRangeValue | null | undefined;
 export type PageProperties = Record<string, StoredPropertyValue>;

@@ -53,6 +53,7 @@ export type {
   DatePropertyDefinition, PersonPropertyDefinition, CheckboxPropertyDefinition,
   UrlPropertyDefinition, EmailPropertyDefinition, PhonePropertyDefinition,
   CreatedTimePropertyDefinition, LastEditedTimePropertyDefinition,
+  RelationPropertyDefinition, RelationPageOption, RelationTargetOption,
 } from './types';
 export type { CalloutColor } from './editor/nodes/CalloutNode';
 export type { ColumnCount } from './editor/nodes/ColumnLayoutNode';
