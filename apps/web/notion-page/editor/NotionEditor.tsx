@@ -36,6 +36,7 @@ import { MentionPlugin } from './MentionPlugin';
 import { SerializedStateSyncPlugin } from './SerializedStateSyncPlugin';
 import { LocalCursorLabelPlugin } from './LocalCursorLabelPlugin';
 import { WorkspaceComponentPlugin } from './WorkspaceComponentPlugin';
+import { getBlockIdentityIndex, withStableBlockIds } from './blockIdentity';
 
 // URL matchers for AutoLinkPlugin
 const URL_MATCHER = /((https?:\/\/|www\.|ftp\.)((\w+:\w+@)?[\w-]+(\.[\w-]+)+(:\d+)?(\/[^\s]*)?)|[\w-]+\.[\w-]{2,}(\/[^\s]*)?)/i;
@@ -78,6 +79,11 @@ export function NotionEditor({
 }: NotionEditorProps) {
   const [containerElem, setContainerElem] = useState<HTMLDivElement | null>(null);
   const changeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const blockIndexRef = useRef(getBlockIdentityIndex(initialContent));
+
+  useEffect(() => {
+    blockIndexRef.current = getBlockIdentityIndex(initialContent);
+  }, [initialContent]);
 
   const initialConfig: InitialConfigType = {
     namespace: collab ? `collab-${collab.room}` : 'notion-page',
@@ -91,7 +97,8 @@ export function NotionEditor({
   const handleChange = useCallback(
     (editorState: EditorState) => {
       if (changeTimer.current) clearTimeout(changeTimer.current);
-      const snapshot = editorState.toJSON();
+      const snapshot = withStableBlockIds(editorState.toJSON(), { previous: blockIndexRef.current });
+      blockIndexRef.current = snapshot.blockIndex;
       changeTimer.current = setTimeout(() => {
         changeTimer.current = null;
         onChange?.(snapshot);
