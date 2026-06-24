@@ -52,6 +52,7 @@ export function DatabaseCollectionView({ resource, schema, pages, onOpenPage, on
     <div className="lab-gallery-view">{pages.map((page) => <NotionPageCard key={page.id} schema={schema} page={page} visiblePropertyIds={properties.map((property) => property.id)} onClick={() => onOpenPage(page.id)} onPropertyChange={(propertyId, value) => onPropertyChange(page.id, propertyId, value)} />)}</div>
   </section>;
 
+  if (resource.type !== 'timeline') return null;
   const dated = pages.map((page) => ({ page, start: dateStart(page.properties[resource.datePropertyId]) })).filter((item): item is { page: NotionPageData; start: string } => Boolean(item.start)).sort((left, right) => left.start.localeCompare(right.start));
   return <section className="lab-collection-view">
     <CollectionHeader resource={resource} count={dated.length} onCreatePage={onCreatePage} />

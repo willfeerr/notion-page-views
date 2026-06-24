@@ -315,7 +315,7 @@ export function PropertiesPanel({
     }
     const oldIdx = schema.properties.findIndex((p) => p.id === active.id);
     const newIdx = schema.properties.findIndex((p) => p.id === over.id);
-    if (oldIdx === -1 || newIdx === -1) return;
+    if (oldIdx === -1 || newIdx === -1 || !onSchemaChange) return;
     onSchemaChange({ ...schema, properties: arrayMove(schema.properties, oldIdx, newIdx) });
   }
 
