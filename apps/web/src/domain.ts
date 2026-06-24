@@ -124,6 +124,14 @@ export function buildProperty(type: PropertyType, name?: string, people: PersonO
   return { id, name: name ?? type, type } as PropertyDefinition;
 }
 
+export function buildInitialDataSourceProperties(primary: PropertyDefinition): PropertyDefinition[] {
+  return [
+    primary,
+    buildProperty('created_time', 'Criado em'),
+    buildProperty('last_edited_time', 'Editado em'),
+  ];
+}
+
 export function emptyValueFor(definition: PropertyDefinition): StoredPropertyValue {
   if (definition.type === 'checkbox') return false;
   if (definition.type === 'multi_select' || definition.type === 'person') return [];

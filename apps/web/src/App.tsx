@@ -12,7 +12,7 @@ import { CalendarView } from './CalendarView';
 import { WorkspaceYjsStore } from './workspaceYjs';
 import { downloadJson, pageExport, pageSearchText, workspaceExport } from './exportJson';
 import {
-  buildProperty, createId, emptyValueFor, normalizeDateValue, schemaForResource,
+  buildInitialDataSourceProperties, buildProperty, createId, emptyValueFor, normalizeDateValue, schemaForResource,
   type BoardResource, type CalendarResource, type WorkspaceResource,
 } from './domain';
 import { ROOM_NAMES } from './yjs/model';
@@ -131,9 +131,8 @@ export default function App() {
 
   const openPage = pages.find((page) => page.id === openId) ?? pages[0] ?? null;
   const activeResource = resources.find((resource) => resource.id === activeResourceId);
-  const activeSchema = useMemo(() => schemaForResource(
-    activeResource ? dataSourceSchemas[activeResource.dataSourceId] ?? { properties: [] } : { properties: [] },
-    activeResource,
+  const activeSchema = useMemo(() => (
+    activeResource ? dataSourceSchemas[activeResource.dataSourceId] ?? { properties: [] } : { properties: [] }
   ), [activeResource, dataSourceSchemas]);
   const schemaCatalog = useMemo(() => {
     const properties = new Map<string, NotionSchema['properties'][number]>();
@@ -149,7 +148,7 @@ export default function App() {
     ? resources.find((resource): resource is BoardResource => resource.type === 'board' && resource.pageIds.includes(openPage.id))
     : undefined;
   const openPageSchema = openPageResource
-    ? schemaForResource(dataSourceSchemas[openPageResource.dataSourceId] ?? { properties: [] }, openPageResource)
+    ? dataSourceSchemas[openPageResource.dataSourceId] ?? { properties: [] }
     : openPage ? pageSchemas[openPage.id] ?? { properties: [] } : { properties: [] };
   const boardOptions: BoardLinkOption[] = resources.flatMap((resource) => {
     if (resource.type !== 'board') return [];
@@ -400,14 +399,15 @@ export default function App() {
     const owner = existingDate
       ? resources.find((resource) => resource.propertyIds.includes(existingDate.id))
       : undefined;
-    const propertyIds = owner?.propertyIds ?? [primary.id];
+    const initialDefinitions = owner ? [] : buildInitialDataSourceProperties(primary);
+    const propertyIds = owner?.propertyIds ?? initialDefinitions.map((property) => property.id);
     const databaseId = owner?.databaseId ?? createId('database');
     const dataSourceId = owner?.dataSourceId ?? createId('datasource');
     const id = createId(type);
     const resource: WorkspaceResource = type === 'board'
       ? { id, databaseId, dataSourceId, type, title, pageIds: [], propertyIds, statusPropertyId: primary.id }
       : { id, databaseId, dataSourceId, type, title, pageIds: owner?.pageIds ?? [], propertyIds, datePropertyId: primary.id, timezone: 'America/Sao_Paulo', defaultView: 'month', visibleHours: { from: 7, to: 21 } };
-    workspaceStoreRef.current?.createResource(resource, existingDate ? [] : [primary]);
+    workspaceStoreRef.current?.createResource(resource, initialDefinitions);
     setActiveResourceId(resource.id);
     setView(type);
     setCreatingType(null);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PropertyDefinition } from '../notion-page/types';
-import { convertPropertyValue, normalizeDateValue } from './domain';
+import { buildInitialDataSourceProperties, convertPropertyValue, normalizeDateValue } from './domain';
 
 describe('property migrations', () => {
   it('keeps a valid status and applies the fallback only to removed options', () => {
@@ -29,5 +29,16 @@ describe('date normalization', () => {
     expect(normalizeDateValue({ start: '2026-06-21T09:30', end: '2026-06-21T11:00', allDay: false }, 'America/Sao_Paulo')).toEqual({
       start: '2026-06-21T09:30', end: '2026-06-21T11:00', allDay: false, timezone: 'America/Sao_Paulo',
     });
+  });
+});
+
+describe('data source defaults', () => {
+  it('includes created and last edited audit properties for a new board', () => {
+    const primary: PropertyDefinition = {
+      id: 'status', name: 'Status', type: 'status', options: [], groups: [],
+    };
+    expect(buildInitialDataSourceProperties(primary).map((property) => property.type)).toEqual([
+      'status', 'created_time', 'last_edited_time',
+    ]);
   });
 });

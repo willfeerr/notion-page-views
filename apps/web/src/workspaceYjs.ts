@@ -299,6 +299,33 @@ export class WorkspaceYjsStore {
       this.syncRooms(seed);
       this.publish();
     }
+    if (!this.migrations.has('audit-properties-v1')) this.migrateAuditProperties(seed.schema);
+  }
+
+  private migrateAuditProperties(fallbackSchema: NotionSchema): void {
+    const auditDefinitions = fallbackSchema.properties.filter((definition) => (
+      definition.type === 'created_time' || definition.type === 'last_edited_time'
+    ));
+    this.dataSourceRooms.forEach((room) => {
+      const existingTypes = new Set(roomSchema(room).properties.map((definition) => definition.type));
+      const missing = auditDefinitions.filter((definition) => !existingTypes.has(definition.type));
+      if (!missing.length) return;
+      room.document.transact(() => {
+        missing.forEach((definition) => {
+          room.definitions.set(definition.id, JSON.stringify(definition));
+          if (!room.definitionOrder.toArray().includes(definition.id)) room.definitionOrder.push([definition.id]);
+          room.pages.forEach((page) => {
+            const properties = page.get('properties');
+            if (!(properties instanceof YMap) || properties.has(definition.id)) return;
+            const field = definition.type === 'created_time' ? 'createdTime' : 'lastEditedTime';
+            properties.set(definition.id, (page.get(field) as StoredPropertyValue) ?? null);
+          });
+        });
+      }, 'audit-properties-v1');
+    });
+    this.workspaceDocument.transact(() => {
+      this.migrations.set('audit-properties-v1', new Date().toISOString());
+    }, 'audit-properties-v1-complete');
   }
 
   private initializeFresh(seed: WorkspaceSeed): void {

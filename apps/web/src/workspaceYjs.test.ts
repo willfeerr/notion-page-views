@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Array as YArray, Doc, Map as YMap, applyUpdate, encodeStateAsUpdate } from 'yjs';
 import type { NotionPageData, NotionSchema } from '../notion-page/types';
+import { buildInitialDataSourceProperties } from './domain';
 import { WorkspaceYjsStore } from './workspaceYjs';
 
 function createStore(onRoom?: (room: string) => void, persisted: Map<string, Doc> = new Map()) {
@@ -84,25 +85,37 @@ describe('WorkspaceYjsStore', () => {
   });
 
   it('creates a board with independent pages, properties and grouping status', () => {
-    const store = createStore();
+    const persisted = new Map<string, Doc>();
+    const store = createStore(undefined, persisted);
     store.initialize({ schema, pages: [page] });
     const boardStatus: NotionSchema['properties'][number] = {
       id: 'status-new-board', name: 'New board status', type: 'status',
       options: [{ id: 'new-todo', name: 'Todo', color: 'gray' }], groups: [],
     };
+    const boardDefinitions = buildInitialDataSourceProperties(boardStatus);
     store.createResource({
       id: 'board-new', databaseId: 'database-new', dataSourceId: 'source-new', type: 'board', title: 'New board', pageIds: [],
-      propertyIds: [boardStatus.id], statusPropertyId: boardStatus.id,
-    }, [boardStatus]);
+      propertyIds: boardDefinitions.map((property) => property.id), statusPropertyId: boardStatus.id,
+    }, boardDefinitions);
 
     const resources = store.read().resources ?? [];
     const original = resources.find((resource) => resource.id === 'board-roadmap');
     const created = resources.find((resource) => resource.id === 'board-new');
     expect(created).toMatchObject({
-      databaseId: 'database-new', dataSourceId: 'source-new', pageIds: [], propertyIds: ['status-new-board'], statusPropertyId: 'status-new-board',
+      databaseId: 'database-new', dataSourceId: 'source-new', pageIds: [], statusPropertyId: 'status-new-board',
     });
+    expect(store.read().dataSourceSchemas?.['source-new'].properties.map((property) => property.type)).toEqual([
+      'status', 'created_time', 'last_edited_time',
+    ]);
     expect(original?.pageIds).toEqual(['page-1']);
     expect(original?.propertyIds).not.toContain('status-new-board');
+
+    store.destroy();
+    const restored = createStore(undefined, persisted);
+    restored.initialize({ schema, pages: [page] });
+    expect(restored.read().resources?.find((resource) => resource.id === 'board-new')).toMatchObject({
+      databaseId: 'database-new', dataSourceId: 'source-new', title: 'New board',
+    });
   });
 
   it('keeps newly inserted pages independent until explicitly linked', () => {
@@ -232,6 +245,13 @@ describe('WorkspaceYjsStore', () => {
   });
 
   it('migrates database v2 to data source v1 idempotently without losing values', () => {
+    const schemaWithAudit: NotionSchema = {
+      properties: [
+        ...schema.properties,
+        { id: 'createdTime', name: 'Criado em', type: 'created_time' },
+        { id: 'editedTime', name: 'Editado em', type: 'last_edited_time' },
+      ],
+    };
     const workspace = new Doc();
     workspace.getMap<string>('resource-references').set('board-roadmap', JSON.stringify({
       id: 'board-roadmap', type: 'board', databaseId: 'roadmap',
@@ -256,16 +276,23 @@ describe('WorkspaceYjsStore', () => {
       ['view:board-roadmap', view],
     ]);
     const first = createStore(undefined, persisted);
-    first.initialize({ schema, pages: [page] });
+    first.initialize({ schema: schemaWithAudit, pages: [page] });
     const firstState = first.read();
     first.destroy();
 
     const second = createStore(undefined, persisted);
-    second.initialize({ schema, pages: [page] });
+    second.initialize({ schema: schemaWithAudit, pages: [page] });
     const secondState = second.read();
     expect(secondState.pages).toEqual(firstState.pages);
     expect(secondState.pages).toHaveLength(1);
-    expect(secondState.pages[0].properties).toEqual(page.properties);
+    expect(secondState.pages[0].properties).toMatchObject({
+      ...page.properties,
+      createdTime: page.createdTime,
+      editedTime: page.lastEditedTime,
+    });
+    expect(secondState.dataSourceSchemas?.roadmap.properties.map((property) => property.type)).toEqual([
+      'status', 'date', 'text', 'created_time', 'last_edited_time',
+    ]);
     expect(secondState.ownership?.['page-1']).toMatchObject({ dataSourceId: 'roadmap', version: 1 });
     expect(secondState.dataSources).toEqual([{ id: 'roadmap', databaseId: 'roadmap', title: 'Roadmap' }]);
   });

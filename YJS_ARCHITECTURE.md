@@ -49,6 +49,8 @@ Database properties belong to the data-source schema, not to an individual page 
 
 Removing a property archives its row values inside the data source. Adding the same stable property ID again restores those values instead of silently discarding them.
 
+The one-time `audit-properties-v1` repair restores legacy Created time and Last edited time definitions that were previously hidden by a view projection. New data sources create both audit properties by default.
+
 Standalone pages have no database properties. They must be moved into a database before receiving Status, Date, Person or other database fields.
 
 Selecting a different board grouping property changes only the view configuration. Rows without a valid value render in the synthetic `Sem status` lane; the application does not silently rewrite them.
