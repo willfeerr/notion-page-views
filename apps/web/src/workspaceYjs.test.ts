@@ -7,7 +7,8 @@ import { WorkspaceYjsStore } from './workspaceYjs';
 function createStore(onRoom?: (room: string) => void, persisted: Map<string, Doc> = new Map()) {
   return new WorkspaceYjsStore((room, document) => {
     onRoom?.(room);
-    const source = persisted.get(room) ?? persisted.get(legacyRoomName(room)) ?? new Doc();
+    const legacyName = legacyRoomName(room);
+    const source = persisted.get(room) ?? (legacyName ? persisted.get(legacyName) : undefined) ?? new Doc();
     persisted.set(room, source);
     applyUpdate(document, encodeStateAsUpdate(source));
     const persist = (update: Uint8Array) => applyUpdate(source, update);
