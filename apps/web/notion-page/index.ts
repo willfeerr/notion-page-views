@@ -31,6 +31,11 @@ export {
 } from './editor/nodes/ToggleHeadingNode';
 export { $createImageNode, $isImageNode, ImageNode, INSERT_IMAGE_COMMAND } from './editor/nodes/ImageNode';
 export { $createEmbedNode, $isEmbedNode, EmbedNode, INSERT_EMBED_COMMAND } from './editor/nodes/EmbedNode';
+export {
+  $createWorkspaceComponentNode, $isWorkspaceComponentNode,
+  WorkspaceComponentNode, INSERT_WORKSPACE_COMPONENT_COMMAND,
+} from './editor/nodes/WorkspaceComponentNode';
+export type { WorkspaceComponentType, SerializedWorkspaceComponentNode } from './editor/nodes/WorkspaceComponentNode';
 export { $createMathNode, $isMathNode, MathNode, INSERT_MATH_COMMAND } from './editor/nodes/MathNode';
 export { $createMentionNode, $isMentionNode, MentionNode } from './editor/nodes/MentionNode';
 export {

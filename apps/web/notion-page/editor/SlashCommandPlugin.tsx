@@ -24,6 +24,7 @@ import { INSERT_EMBED_COMMAND } from './nodes/EmbedNode';
 import { INSERT_MATH_COMMAND } from './nodes/MathNode';
 import { INSERT_BOOKMARK_COMMAND } from './nodes/BookmarkNode';
 import { INSERT_COLUMN_LAYOUT_COMMAND } from './nodes/ColumnLayoutNode';
+import { INSERT_WORKSPACE_COMPONENT_COMMAND } from './nodes/WorkspaceComponentNode';
 import {
   Heading1, Heading2, Heading3, Pilcrow, List, ListOrdered, ListChecks,
   Quote, Minus, Code, Table, Image, Video, FunctionSquare,
@@ -83,15 +84,6 @@ const CALLOUT_PRESETS: Array<{ label: string; color: CalloutColor; emoji: string
   { label: 'Callout (laranja)',  color: 'orange', emoji: '⚠️' },
   { label: 'Callout (vermelho)', color: 'red',    emoji: '🚨' },
 ];
-
-function workspaceEmbedUrl(kind: 'page' | 'board', id: string): string {
-  const url = new URL(window.location.href);
-  url.hash = '';
-  url.search = '';
-  url.searchParams.set('embed', kind);
-  url.searchParams.set('id', id);
-  return url.toString();
-}
 
 const ALL_OPTIONS: BlockOption[] = [
   // ── Básicos ──────────────────────────────────────────────────────
@@ -200,18 +192,18 @@ const ALL_OPTIONS: BlockOption[] = [
       if (url) editor.dispatchCommand(INSERT_EMBED_COMMAND, { url });
     },
   }),
-  new BlockOption({ title: 'Page embed', description: 'Incorporar uma pagina do workspace', icon: FileText, group: 'Mídia',
-    keywords: ['page','pagina','embed','documento'],
+  new BlockOption({ title: 'Pagina vinculada', description: 'Abrir outra pagina deste workspace', icon: FileText, group: 'Workspace',
+    keywords: ['page','pagina','link','documento','workspace'],
     onSelect: (editor) => {
       const id = window.prompt('ID da pagina:', 'page-1')?.trim();
-      if (id) editor.dispatchCommand(INSERT_EMBED_COMMAND, { url: workspaceEmbedUrl('page', id) });
+      if (id) editor.dispatchCommand(INSERT_WORKSPACE_COMPONENT_COMMAND, { componentType: 'page', targetId: id });
     },
   }),
-  new BlockOption({ title: 'Board embed', description: 'Incorporar o board do workspace', icon: Columns3, group: 'Mídia',
-    keywords: ['board','kanban','embed'],
+  new BlockOption({ title: 'Board na pagina', description: 'Adicionar um board deste workspace', icon: Columns3, group: 'Workspace',
+    keywords: ['board','kanban','workspace'],
     onSelect: (editor) => {
       const id = window.prompt('ID do board:', 'board-roadmap')?.trim();
-      if (id) editor.dispatchCommand(INSERT_EMBED_COMMAND, { url: workspaceEmbedUrl('board', id) });
+      if (id) editor.dispatchCommand(INSERT_WORKSPACE_COMPONENT_COMMAND, { componentType: 'board', targetId: id });
     },
   }),
 

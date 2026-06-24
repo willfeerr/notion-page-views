@@ -147,6 +147,35 @@ export default function App() {
     };
   }, [initial]);
 
+  useEffect(() => {
+    function openWorkspaceComponent(event: Event) {
+      const detail = (event as CustomEvent<{
+        componentType?: 'page' | 'board';
+        targetId?: string;
+      }>).detail;
+      if (!detail?.targetId) return;
+
+      if (detail.componentType === 'page' && pages.some((page) => page.id === detail.targetId)) {
+        setOpenId(detail.targetId);
+        setPeekMode(null);
+        setView('page');
+        return;
+      }
+
+      if (detail.componentType === 'board') {
+        const board = resources.find((resource) => resource.type === 'board' && resource.id === detail.targetId);
+        if (!board) return;
+        setActiveResourceId(board.id);
+        setOpenId(null);
+        setPeekMode(null);
+        setView('board');
+      }
+    }
+
+    window.addEventListener('skrbe:open-workspace-component', openWorkspaceComponent);
+    return () => window.removeEventListener('skrbe:open-workspace-component', openWorkspaceComponent);
+  }, [pages, resources]);
+
   const openPage = pages.find((page) => page.id === openId) ?? pages[0] ?? null;
   const activeResource = resources.find((resource) => resource.id === activeResourceId);
   const activeSchema = useMemo(() => (

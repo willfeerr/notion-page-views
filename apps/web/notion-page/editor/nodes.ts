@@ -14,6 +14,7 @@ import { MathNode } from './nodes/MathNode';
 import { MentionNode } from './nodes/MentionNode';
 import { ColumnLayoutNode, ColumnNode } from './nodes/ColumnLayoutNode';
 import { BookmarkNode } from './nodes/BookmarkNode';
+import { WorkspaceComponentNode } from './nodes/WorkspaceComponentNode';
 
 export const editorNodes: ReadonlyArray<Klass<LexicalNode>> = [
   // Core rich-text
@@ -32,6 +33,7 @@ export const editorNodes: ReadonlyArray<Klass<LexicalNode>> = [
   EmbedNode,
   MathNode,
   BookmarkNode,
+  WorkspaceComponentNode,
   // Inline custom nodes
   MentionNode,
   // Layout

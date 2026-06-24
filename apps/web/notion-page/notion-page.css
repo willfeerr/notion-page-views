@@ -1149,7 +1149,29 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   EMBED BLOCK
+   WORKSPACE COMPONENTS
+   ═══════════════════════════════════════════════════════════════ */
+.npc-workspace-component-wrapper { display: block; margin: 4px 0; }
+.npc-workspace-component {
+  width: 100%; min-width: 0; display: flex; align-items: center; gap: 10px;
+  padding: 8px 9px; border: 0; border-radius: 5px; background: transparent;
+  color: var(--npc-text-primary); text-align: left; cursor: pointer;
+}
+.npc-workspace-component:hover { background: var(--npc-hover-bg); }
+.npc-workspace-component-icon {
+  width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center;
+  border-radius: 5px; background: var(--npc-hover-bg); color: var(--npc-text-secondary);
+}
+.npc-workspace-component-copy { min-width: 0; flex: 1; display: grid; gap: 1px; }
+.npc-workspace-component-copy strong,
+.npc-workspace-component-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.npc-workspace-component-copy strong { font-size: 13px; font-weight: 600; }
+.npc-workspace-component-copy small { color: var(--npc-text-secondary); font-size: 10px; }
+.npc-workspace-component-open { flex: 0 0 auto; color: var(--npc-text-secondary); opacity: 0; }
+.npc-workspace-component:hover .npc-workspace-component-open { opacity: 1; }
+
+/* ═══════════════════════════════════════════════════════════════
+   EXTERNAL EMBED BLOCK
    ═══════════════════════════════════════════════════════════════ */
 .npc-embed-wrapper { display: block; }
 .npc-embed {
@@ -1188,11 +1210,6 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
 }
 .npc-embed-generic-link:hover { text-decoration: underline; }
-.npc-embed-kind {
-  padding: 2px 7px; border-radius: 999px; background: var(--npc-accent-soft);
-  color: var(--npc-text-secondary); font-size: 10px; font-weight: 650;
-}
-.npc-embed-workspace-frame { display: block; width: 100%; height: 390px; border: 0; background: #fafafa; }
 .npc-date-range-field { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 .npc-date-all-day { display: inline-flex; align-items: center; gap: 5px; color: var(--npc-text-secondary); font-size: 11px; }
 .npc-date-range-field .npc-date-input { width: 148px; }
@@ -1215,7 +1232,6 @@
 .dark .npc-block-menu-item-danger:hover,
 .dark .npc-link-action-danger:hover,
 .dark .npc-option-delete-btn:hover { background: color-mix(in oklab, #e03e3e 16%, transparent); }
-.npc-embed-workspace-error { display: grid; min-height: 120px; place-items: center; color: var(--npc-text-secondary); font-size: 13px; }
 
 /* ═══════════════════════════════════════════════════════════════
    MATH / KATEX BLOCK

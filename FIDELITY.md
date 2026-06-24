@@ -23,7 +23,8 @@ This repository now runs the real React/Lexical components. The table separates 
 | Database page layout | Implemented | Up to four pinned properties and configurable collapsible sections persist per Data Source |
 | Database page templates | Implemented | Capture and reuse page metadata, editable properties and Lexical content with regenerated identity/audit fields |
 | Rich-text editor | Implemented | Real Lexical state, slash menu and custom nodes |
-| Images, embeds, bookmarks and math | Implemented | URL-based MVP nodes |
+| Images, external embeds, bookmarks and math | Implemented | URL-based MVP nodes for external content |
+| Internal page and board components | Implemented | Native workspace blocks open targets through app state without iframes |
 | Local persistence | Implemented | Schema/page snapshot plus persisted binary Yjs state per room |
 | Real-time collaboration | Implemented locally | Yjs over BroadcastChannel; Hocuspocus transport adapter is ready |
 | Database / Data Source separation | Implemented | Versioned container and source rooms with explicit IDs |

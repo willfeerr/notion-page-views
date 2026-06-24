@@ -35,6 +35,7 @@ import type { CollabConfig, PersonOption } from '../types';
 import { MentionPlugin } from './MentionPlugin';
 import { SerializedStateSyncPlugin } from './SerializedStateSyncPlugin';
 import { LocalCursorLabelPlugin } from './LocalCursorLabelPlugin';
+import { WorkspaceComponentPlugin } from './WorkspaceComponentPlugin';
 
 // URL matchers for AutoLinkPlugin
 const URL_MATCHER = /((https?:\/\/|www\.|ftp\.)((\w+:\w+@)?[\w-]+(\.[\w-]+)+(:\d+)?(\/[^\s]*)?)|[\w-]+\.[\w-]{2,}(\/[^\s]*)?)/i;
@@ -131,6 +132,7 @@ export function NotionEditor({
           {/* Command handlers */}
           <ImagePlugin />
           <EmbedPlugin />
+          <WorkspaceComponentPlugin />
           <MathPlugin />
           <ColumnLayoutPlugin />
           <BookmarkPlugin />
