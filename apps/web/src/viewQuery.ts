@@ -61,7 +61,12 @@ export function sortPages(pages: NotionPageData[], sorts: SortDefinition[] = [])
   if (!sorts.length) return pages;
   return [...pages].sort((left, right) => {
     for (const sort of sorts) {
-      const result = compareValue(pageValue(left, sort.propertyId), pageValue(right, sort.propertyId));
+      const leftValue = pageValue(left, sort.propertyId);
+      const rightValue = pageValue(right, sort.propertyId);
+      const leftEmpty = isEmpty(leftValue);
+      const rightEmpty = isEmpty(rightValue);
+      if (leftEmpty !== rightEmpty) return leftEmpty ? 1 : -1;
+      const result = compareValue(leftValue, rightValue);
       if (result) return sort.direction === 'ascending' ? result : -result;
     }
     return left.id.localeCompare(right.id);
