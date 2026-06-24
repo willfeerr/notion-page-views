@@ -263,6 +263,57 @@ describe('WorkspaceYjsStore', () => {
     expect(store.read().pages.find((item) => item.id === 'page-1')?.properties.relation).toEqual([]);
   });
 
+  it('preserves page content across relation updates, view changes and moves', () => {
+    const store = createStore();
+    const content: NotionPageData['content'] = {
+      root: {
+        type: 'root',
+        version: 1,
+        format: '',
+        indent: 0,
+        direction: null,
+        children: [{
+          type: 'paragraph',
+          version: 1,
+          format: '',
+          indent: 0,
+          direction: null,
+          children: [{ type: 'text', version: 1, text: 'Conteudo persistente', format: 0, style: '', detail: 0, mode: 'normal' }],
+        }],
+      },
+    } as NotionPageData['content'];
+    const sourcePage = { ...page, id: 'content-page', title: 'Content page', content };
+    store.initialize({ schema, pages: [sourcePage] });
+
+    const targetStatus = { id: 'target-status', name: 'Status', type: 'status' as const, options: [], groups: [] };
+    store.createResource({
+      id: 'target-board', databaseId: 'target-db', dataSourceId: 'target-source',
+      type: 'board', title: 'Target', pageIds: [], propertyIds: [targetStatus.id], statusPropertyId: targetStatus.id,
+    }, [targetStatus]);
+    store.insertPage({ ...page, id: 'related-page', title: 'Related', properties: {} }, undefined, 'target-source');
+    store.applySchema('roadmap', {
+      properties: [...schema.properties, {
+        id: 'relation', name: 'Related page', type: 'relation', targetDataSourceId: 'target-source', multiple: true,
+      }],
+    });
+
+    store.updateProperty('content-page', 'relation', ['related-page']);
+    store.createResource({
+      id: 'table-roadmap', databaseId: 'roadmap', dataSourceId: 'roadmap',
+      type: 'table', title: 'Table', pageIds: [], propertyIds: ['status'],
+    });
+    let state = store.read();
+    expect(state.ownership?.['content-page']).toMatchObject({ dataSourceId: 'roadmap' });
+    expect(state.resources?.find((resource) => resource.id === 'table-roadmap')?.pageIds).toEqual(['content-page']);
+    expect(state.pages.find((item) => item.id === 'content-page')?.content).toEqual(content);
+
+    const operation = store.prepareMove('content-page', 'target-source')!;
+    expect(store.commitMove(operation.id)?.status).toBe('cleaned');
+    state = store.read();
+    expect(state.ownership?.['content-page']).toMatchObject({ dataSourceId: 'target-source' });
+    expect(state.pages.find((item) => item.id === 'content-page')?.content).toEqual(content);
+  });
+
   it('allocates unique IDs during schema changes and protects system values', () => {
     const store = createStore();
     store.initialize({ schema, pages: [page] });
