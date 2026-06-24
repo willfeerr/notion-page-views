@@ -34,6 +34,7 @@ Each data source document owns:
 - `pages`: one nested `Y.Map` per page containing property values, metadata projection, preview and per-view ranks.
 - `page-order`: deterministic fallback ordering.
 - `page-layout`: pinned properties and ordered, collapsible property sections shared by its database pages.
+- `page-templates`: reusable page metadata, editable property defaults and Lexical snapshots keyed by template ID.
 
 Status option IDs remain stable when a lane is renamed. Changing a page status updates only that row.
 

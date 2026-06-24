@@ -104,6 +104,19 @@ export interface DatabasePageLayout {
   sections: DatabasePageLayoutSection[];
 }
 
+export interface DatabasePageTemplate {
+  id: string;
+  name: string;
+  title: string;
+  icon?: string | null;
+  coverUrl?: string | null;
+  coverPosition?: number;
+  properties: PageProperties;
+  content: SerializedEditorState | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface BoardLinkLane {
   id: string;
   name: string;

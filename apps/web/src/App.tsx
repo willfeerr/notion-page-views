@@ -6,7 +6,7 @@ import type { SerializedEditorState } from 'lexical';
 import { NotionEditor, NotionPageCard, NotionPageView } from '../notion-page';
 import { PropertiesPanel } from '../notion-page/PropertiesPanel';
 import { samplePages, sampleSchema } from '../notion-page/example/sampleData';
-import type { BoardLinkOption, BoardLinkValue, CollabPresence, DatabasePageLayout, NotionPageData, NotionSchema, RelationTargetOption, StoredPropertyValue } from '../notion-page/types';
+import type { BoardLinkOption, BoardLinkValue, CollabPresence, DatabasePageLayout, DatabasePageTemplate, NotionPageData, NotionSchema, RelationTargetOption, StoredPropertyValue } from '../notion-page/types';
 import { BroadcastProvider } from '../notion-page/editor/BroadcastProvider';
 import { CalendarView } from './CalendarView';
 import { ChartView } from './ChartView';
@@ -21,6 +21,8 @@ import { ROOM_NAMES } from './yjs/model';
 import { executeViewQuery } from './viewQuery';
 import { defaultPropertyValue } from './propertyRegistry';
 import { ViewSettings } from './ViewSettings';
+import { PageTemplateMenu } from './PageTemplateMenu';
+import { capturePageTemplate, instantiatePageTemplate } from './pageTemplates';
 
 type View = WorkspaceResource['type'] | 'page';
 
@@ -80,6 +82,7 @@ export default function App() {
   const [pageSchemas, setPageSchemas] = useState<Record<string, NotionSchema>>({});
   const [dataSourceSchemas, setDataSourceSchemas] = useState<Record<string, NotionSchema>>({});
   const [dataSourceLayouts, setDataSourceLayouts] = useState<Record<string, DatabasePageLayout>>({});
+  const [dataSourceTemplates, setDataSourceTemplates] = useState<Record<string, DatabasePageTemplate[]>>({});
   const [ownership, setOwnership] = useState<Record<string, PageOwnership>>({});
   const [view, setView] = useState<View>('board');
   const [activeResourceId, setActiveResourceId] = useState('board-roadmap');
@@ -133,6 +136,7 @@ export default function App() {
       setPageSchemas(state.pageSchemas ?? {});
       setDataSourceSchemas(state.dataSourceSchemas ?? {});
       setDataSourceLayouts(state.dataSourceLayouts ?? {});
+      setDataSourceTemplates(state.dataSourceTemplates ?? {});
       setOwnership(state.ownership ?? {});
     });
 
@@ -165,6 +169,7 @@ export default function App() {
   const openPageSchema = openPageResource
     ? dataSourceSchemas[openPageResource.dataSourceId] ?? { properties: [] }
     : openPage ? pageSchemas[openPage.id] ?? { properties: [] } : { properties: [] };
+  const activeTemplates = activeResource ? dataSourceTemplates[activeResource.dataSourceId] ?? [] : [];
   const boardOptions: BoardLinkOption[] = resources.flatMap((resource) => {
     if (resource.type !== 'board') return [];
     const grouping = dataSourceSchemas[resource.dataSourceId]?.properties.find((property) => property.id === resource.statusPropertyId && property.type === 'status');
@@ -309,33 +314,39 @@ export default function App() {
     } as Partial<WorkspaceResource>);
   }
 
-  function createPage(statusId?: string, afterPageId?: string, resourceId?: string) {
+  function createPage(statusId?: string, afterPageId?: string, resourceId?: string, templateId?: string) {
     const now = new Date().toISOString();
     const targetResource = resourceId ? resources.find((resource) => resource.id === resourceId) : undefined;
     const targetSchema = targetResource
-      ? schemaForResource(dataSourceSchemas[targetResource.dataSourceId] ?? { properties: [] }, targetResource)
+      ? dataSourceSchemas[targetResource.dataSourceId] ?? { properties: [] }
       : { properties: [] };
-    const properties = Object.fromEntries(targetSchema.properties.map((definition) => [
-      definition.id, defaultPropertyValue(definition, { pageId: 'pending', userId: collabUser.id }),
-    ]));
+    const pageId = crypto.randomUUID();
+    const template = targetResource ? dataSourceTemplates[targetResource.dataSourceId]?.find((item) => item.id === templateId) : undefined;
+    const overrides: Record<string, StoredPropertyValue> = {};
     if (targetResource?.type === 'board') {
       const grouping = targetSchema.properties.find((definition) => definition.id === targetResource.statusPropertyId && definition.type === 'status');
-      if (grouping && statusId && statusId !== '__unassigned__') properties[grouping.id] = statusId;
+      if (grouping && statusId && statusId !== '__unassigned__') overrides[grouping.id] = statusId;
     }
-    for (const definition of targetSchema.properties) {
-      if (definition.type === 'created_time' || definition.type === 'last_edited_time') properties[definition.id] = now;
-    }
-    const page: NotionPageData = {
-      id: crypto.randomUUID(), icon: '📄', coverUrl: null, title: 'Sem titulo', properties,
-      content: null, createdTime: now, lastEditedTime: now,
-    };
-    targetSchema.properties.filter((definition) => definition.type === 'unique_id').forEach((definition) => {
-      properties[definition.id] = defaultPropertyValue(definition, { pageId: page.id, userId: collabUser.id });
-    });
+    const page = instantiatePageTemplate({ schema: targetSchema, template, pageId, userId: collabUser.id, now, overrides });
     workspaceStoreRef.current?.insertPage(page, afterPageId, targetResource?.dataSourceId);
     setOpenId(page.id);
     setPeekMode(null);
     setView('page');
+  }
+
+  function saveOpenPageAsTemplate() {
+    if (!openPage || !openPageResource) return;
+    const name = prompt('Nome do template', openPage.title || 'Novo template')?.trim();
+    if (!name) return;
+    workspaceStoreRef.current?.savePageTemplate(
+      openPageResource.dataSourceId,
+      capturePageTemplate(name, openPage, openPageSchema),
+    );
+  }
+
+  function deleteTemplate(templateId: string) {
+    if (!activeResource || !confirm('Excluir este template?')) return;
+    workspaceStoreRef.current?.deletePageTemplate(activeResource.dataSourceId, templateId);
   }
 
   function createBoardPage(statusId = statusOptions[0]?.id, afterPageId?: string) {
@@ -613,11 +624,12 @@ export default function App() {
           <div className="lab-top-actions">
             <span>{pages.length} paginas · {schemaCatalog.properties.length} propriedades</span>
             {activeResource && view !== 'page' ? <ViewSettings resource={activeResource} schema={activeSchema} onChange={updateActiveResource} /> : null}
+            {activeResource && view !== 'page' ? <PageTemplateMenu templates={activeTemplates} onUse={(templateId) => createPage(undefined, undefined, activeResource.id, templateId)} onDelete={deleteTemplate} /> : null}
             <button className="lab-theme-toggle" type="button" title={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
               {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
             </button>
             <button className="lab-export-button" type="button" title="Exportar workspace indexavel como JSON" onClick={exportWorkspace}><FileJson size={14} />JSON</button>
-            <button onClick={() => createPage()}><Plus size={14} />Nova pagina</button>
+            <button onClick={() => activeResource && view !== 'page' ? createPage(undefined, undefined, activeResource.id) : createPage()}><Plus size={14} />Nova pagina</button>
           </div>
         </header>
 
@@ -744,7 +756,7 @@ export default function App() {
                 {presence.filter((item) => item.userId !== collabUser.id).slice(0, 3).map((item) => <i key={item.clientId} style={{ background: item.color }} title={`${item.name} · ${item.location}`} />)}
                 {presence.length > 4 ? <b>+{presence.length - 4}</b> : null}
               </button>
-              <div>{lastMoveOperationId ? <button type="button" onClick={undoLastMove}><RotateCcw size={14} />Desfazer move</button> : null}<button type="button" onClick={() => setMoveDialogOpen(true)}>Mover para...</button><button type="button" title="Exportar pagina como JSON" onClick={() => downloadJson(openPage.title, pageExport(openPage, openPageSchema))}><FileJson size={14} />Exportar JSON</button><button type="button" title="Excluir pagina" onClick={deleteOpenPage}><Trash2 size={14} /></button><button title="Fechar" onClick={closePageView}><X size={15} /></button></div>
+              <div>{lastMoveOperationId ? <button type="button" onClick={undoLastMove}><RotateCcw size={14} />Desfazer move</button> : null}{openPageResource ? <button type="button" onClick={saveOpenPageAsTemplate}>Salvar template</button> : null}<button type="button" onClick={() => setMoveDialogOpen(true)}>Mover para...</button><button type="button" title="Exportar pagina como JSON" onClick={() => downloadJson(openPage.title, pageExport(openPage, openPageSchema))}><FileJson size={14} />Exportar JSON</button><button type="button" title="Excluir pagina" onClick={deleteOpenPage}><Trash2 size={14} /></button><button title="Fechar" onClick={closePageView}><X size={15} /></button></div>
             </div>
             <NotionPageView
               schema={openPageSchema}

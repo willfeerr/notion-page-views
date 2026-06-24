@@ -14,8 +14,10 @@ turbo.json      # pipeline de build, testes e desenvolvimento
 ## Funcionalidades
 
 - Database containers, Data Sources e ownership canonico de paginas
-- Board, Calendar, Table, List, Gallery e Timeline sem duplicacao de rows
+- Board, Calendar, Table, List, Gallery, Timeline e Chart sem duplicacao de rows
 - Filtros AND/OR, multiplos sorts, group/subgroup e projection por view
+- Side peek, center peek e full page configuraveis
+- Layout de database page e templates persistidos por Data Source
 - Operation Journal para moves recuperaveis, schema mapping, conflito e undo
 - Relation real entre Data Sources
 - Property registry, Files, Unique ID, auditoria, Place, Formula e Rollup

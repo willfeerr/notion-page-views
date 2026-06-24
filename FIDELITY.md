@@ -21,6 +21,7 @@ This repository now runs the real React/Lexical components. The table separates 
 | Timeline and Chart | Implemented | Timeline plus bar, line and donut charts with count, sum and average aggregation |
 | Page open mode | Implemented | Full page, side peek and center peek are configurable per view |
 | Database page layout | Implemented | Up to four pinned properties and configurable collapsible sections persist per Data Source |
+| Database page templates | Implemented | Capture and reuse page metadata, editable properties and Lexical content with regenerated identity/audit fields |
 | Rich-text editor | Implemented | Real Lexical state, slash menu and custom nodes |
 | Images, embeds, bookmarks and math | Implemented | URL-based MVP nodes |
 | Local persistence | Implemented | Schema/page snapshot plus persisted binary Yjs state per room |

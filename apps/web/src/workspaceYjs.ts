@@ -1,6 +1,6 @@
 import { Array as YArray, Doc, Map as YMap } from 'yjs';
 import type { SerializedEditorState } from 'lexical';
-import type { DatabasePageLayout, NotionPageData, NotionSchema, PropertyDefinition, StoredPropertyValue } from '../notion-page/types';
+import type { DatabasePageLayout, DatabasePageTemplate, NotionPageData, NotionSchema, PropertyDefinition, StoredPropertyValue } from '../notion-page/types';
 import { getPlainTextPreview } from '../notion-page/editor/getPlainTextPreview';
 import {
   createId, DEFAULT_TIMEZONE, convertPropertyValue, emptyValueFor, type BoardResource,
@@ -28,6 +28,7 @@ export interface WorkspaceState {
   pageSchemas?: Record<string, NotionSchema>;
   dataSourceSchemas?: Record<string, NotionSchema>;
   dataSourceLayouts?: Record<string, DatabasePageLayout>;
+  dataSourceTemplates?: Record<string, DatabasePageTemplate[]>;
   moveOperations?: MoveOperation[];
 }
 
@@ -58,6 +59,7 @@ interface DataSourceRoom {
   pages: YMap<YMap<unknown>>;
   pageOrder: YArray<string>;
   pageLayout: YMap<unknown>;
+  pageTemplates: YMap<string>;
   onTransaction: () => void;
 }
 
@@ -448,6 +450,7 @@ export class WorkspaceYjsStore {
       pages: legacyDocument.getMap<YMap<unknown>>('pages'),
       pageOrder: legacyDocument.getArray<string>('page-order'),
       pageLayout: legacyDocument.getMap<unknown>('page-layout'),
+      pageTemplates: legacyDocument.getMap<string>('page-templates'),
       onTransaction: () => undefined,
     };
     const legacyState = legacyRoom.definitions.size || legacyRoom.pages.size
@@ -512,6 +515,7 @@ export class WorkspaceYjsStore {
         pages: legacyDocument.getMap<YMap<unknown>>('pages'),
         pageOrder: legacyDocument.getArray<string>('page-order'),
         pageLayout: legacyDocument.getMap<unknown>('page-layout'),
+        pageTemplates: legacyDocument.getMap<string>('page-templates'),
         onTransaction: () => undefined,
       };
       const relatedViews = seedResources.filter((resource) => resource.dataSourceId === reference.id || resource.databaseId === reference.id);
@@ -657,6 +661,10 @@ export class WorkspaceYjsStore {
     }));
     const dataSourceSchemas = Object.fromEntries(rooms.map((room) => [room.id, roomSchema(room)]));
     const dataSourceLayouts = Object.fromEntries(rooms.map((room) => [room.id, readPageLayout(room)]));
+    const dataSourceTemplates = Object.fromEntries(rooms.map((room) => [room.id, [...room.pageTemplates.values()].flatMap((value) => {
+      const template = safeJson<DatabasePageTemplate>(value);
+      return template ? [template] : [];
+    }).sort((left, right) => left.name.localeCompare(right.name))]));
     const pages = materializeComputedProperties(rawPages, pageSchemas);
     const ownership = Object.fromEntries([...this.pageOwnership.entries()].flatMap(([pageId, value]) => {
       const parsed = safeJson<PageOwnership>(value);
@@ -671,7 +679,7 @@ export class WorkspaceYjsStore {
       };
     });
     return {
-      pages, resources: this.readResources(), pageSchemas, dataSourceSchemas, dataSourceLayouts,
+      pages, resources: this.readResources(), pageSchemas, dataSourceSchemas, dataSourceLayouts, dataSourceTemplates,
       databases, dataSources: this.readDataSourceReferences(), ownership,
       moveOperations: [...this.moveOperations.values()].flatMap((value) => {
         const operation = safeJson<MoveOperation>(value);
@@ -760,6 +768,7 @@ export class WorkspaceYjsStore {
       pages: document.getMap<YMap<unknown>>('pages'),
       pageOrder: document.getArray<string>('page-order'),
       pageLayout: document.getMap<unknown>('page-layout'),
+      pageTemplates: document.getMap<string>('page-templates'),
       onTransaction: () => this.publish(),
     };
     this.dataSourceRooms.set(id, room);
@@ -921,6 +930,18 @@ export class WorkspaceYjsStore {
     const room = this.dataSourceRooms.get(dataSourceId);
     if (!room) return;
     room.document.transact(() => room.pageLayout.set('value', JSON.stringify(layout)), 'page-layout-change');
+  }
+
+  savePageTemplate(dataSourceId: string, template: DatabasePageTemplate): void {
+    const room = this.dataSourceRooms.get(dataSourceId);
+    if (!room) return;
+    room.document.transact(() => room.pageTemplates.set(template.id, JSON.stringify(template)), 'page-template-save');
+  }
+
+  deletePageTemplate(dataSourceId: string, templateId: string): void {
+    const room = this.dataSourceRooms.get(dataSourceId);
+    if (!room) return;
+    room.document.transact(() => room.pageTemplates.delete(templateId), 'page-template-delete');
   }
 
   insertPage(page: NotionPageData, afterPageId?: string, dataSourceId = 'standalone'): void {

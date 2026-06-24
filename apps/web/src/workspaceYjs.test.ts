@@ -408,6 +408,24 @@ describe('WorkspaceYjsStore', () => {
     });
   });
 
+  it('persists and deletes page templates inside their data source', () => {
+    const persisted = new Map<string, Doc>();
+    const store = createStore(undefined, persisted);
+    store.initialize({ schema, pages: [page] });
+    store.savePageTemplate('roadmap', {
+      id: 'template-brief', name: 'Brief', title: 'Novo brief', icon: '📝', properties: { status: 'todo', score: '10' },
+      content: null, createdAt: '2026-06-24T00:00:00.000Z', updatedAt: '2026-06-24T00:00:00.000Z',
+    });
+    expect(store.read().dataSourceTemplates?.roadmap).toHaveLength(1);
+    store.destroy();
+
+    const restored = createStore(undefined, persisted);
+    restored.initialize({ schema, pages: [page] });
+    expect(restored.read().dataSourceTemplates?.roadmap[0]).toMatchObject({ id: 'template-brief', name: 'Brief' });
+    restored.deletePageTemplate('roadmap', 'template-brief');
+    expect(restored.read().dataSourceTemplates?.roadmap).toEqual([]);
+  });
+
   it('persists table, list, gallery, timeline and chart as views of one data source', () => {
     const persisted = new Map<string, Doc>();
     const store = createStore(undefined, persisted);
