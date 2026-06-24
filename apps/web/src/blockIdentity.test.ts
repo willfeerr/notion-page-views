@@ -74,18 +74,19 @@ describe('block identity', () => {
 
 describe('workspace backlinks', () => {
   it('indexes internal page and board components by target', () => {
+    let next = 0;
     const content = withStableBlockIds(editorState([
       workspaceComponent('page', 'page-target', 'Pagina alvo'),
       workspaceComponent('board', 'board-target', 'Board alvo'),
     ]), {
-      createId: () => 'block-component',
+      createId: () => `block-${++next}`,
       now: '2026-06-24T00:00:00.000Z',
     });
 
     const backlinks = collectWorkspaceBacklinks('source-page', content);
     expect(backlinks).toEqual([
-      { sourcePageId: 'source-page', targetId: 'page-target', targetType: 'page', blockId: 'block-component', label: 'Pagina alvo' },
-      { sourcePageId: 'source-page', targetId: 'board-target', targetType: 'board', blockId: 'block-component', label: 'Board alvo' },
+      { sourcePageId: 'source-page', targetId: 'page-target', targetType: 'page', blockId: 'block-1', label: 'Pagina alvo' },
+      { sourcePageId: 'source-page', targetId: 'board-target', targetType: 'board', blockId: 'block-2', label: 'Board alvo' },
     ]);
 
     const index = buildWorkspaceBacklinkIndex([{ id: 'source-page', content }]);
