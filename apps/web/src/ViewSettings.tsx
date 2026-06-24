@@ -31,7 +31,7 @@ export function ViewSettings({ resource, schema, onChange }: ViewSettingsProps) 
     onChange({ filter: next.length ? { type: 'group', operator: resource.filter?.operator ?? 'and', filters: next } : undefined });
   }
 
-  return <Popover align="right" trigger={({ toggle }) => <button type="button" className="lab-view-settings-trigger" title="Configurar view" onClick={toggle}><SlidersHorizontal size={14} /><span>View</span></button>}>
+  return <Popover align="right" trigger={({ toggle }) => <button type="button" className="lab-view-settings-trigger" title="Configurar exibição" onClick={toggle}><SlidersHorizontal size={14} /><span>Exibição</span></button>}>
     {() => <div className="lab-view-settings">
       <section><strong>Propriedades visíveis</strong><div className="lab-view-property-grid">{schema.properties.map((property) => <label key={property.id}><input type="checkbox" checked={projection.propertyIds.includes(property.id)} onChange={(event) => onChange({ projection: { ...projection, propertyIds: event.target.checked ? [...projection.propertyIds, property.id] : projection.propertyIds.filter((id) => id !== property.id) } })} /><span>{property.name}</span></label>)}</div></section>
 

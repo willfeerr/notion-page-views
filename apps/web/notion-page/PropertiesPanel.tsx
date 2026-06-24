@@ -225,7 +225,7 @@ function SortablePropertyRow({
 
       <div className="npc-property-value-cell">
         {definition.type === 'relation' && !readOnly && relationTargets.length > 0 ? (
-          <select className="npc-relation-target" aria-label="Data Source relacionado" value={definition.targetDataSourceId}
+          <select className="npc-relation-target" aria-label="Base relacionada" value={definition.targetDataSourceId}
             onChange={(event) => onRelationTargetChange(definition.id, event.target.value)}>
             {relationTargets.map((target) => <option key={target.id} value={target.id}>{target.title}</option>)}
           </select>
