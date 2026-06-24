@@ -58,7 +58,17 @@ export interface CalendarResource extends ResourceBase {
   visibleHours: { from: number; to: number };
 }
 
-export type WorkspaceResource = BoardResource | CalendarResource;
+export interface TimelineResource extends ResourceBase {
+  type: 'timeline';
+  datePropertyId: string;
+  timezone: string;
+}
+
+export interface CollectionResource extends ResourceBase {
+  type: 'table' | 'list' | 'gallery';
+}
+
+export type WorkspaceResource = BoardResource | CalendarResource | TimelineResource | CollectionResource;
 
 export interface DatabaseContainer {
   id: string;

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from 'react';
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { createPortal } from 'react-dom';
-import { CalendarDays, FileJson, FileText, GripVertical, Moon, PanelLeftClose, PanelLeftOpen, Plus, RotateCcw, Search, Sun, Trash2, X } from 'lucide-react';
+import { CalendarDays, CalendarRange, FileJson, FileText, GripVertical, Images, List, Moon, PanelLeftClose, PanelLeftOpen, Plus, RotateCcw, Search, Sun, Table2, Trash2, X } from 'lucide-react';
 import type { SerializedEditorState } from 'lexical';
 import { NotionEditor, NotionPageCard, NotionPageView } from '../notion-page';
 import { PropertiesPanel } from '../notion-page/PropertiesPanel';
@@ -9,6 +9,7 @@ import { samplePages, sampleSchema } from '../notion-page/example/sampleData';
 import type { BoardLinkOption, BoardLinkValue, CollabPresence, NotionPageData, NotionSchema, RelationTargetOption, StoredPropertyValue } from '../notion-page/types';
 import { BroadcastProvider } from '../notion-page/editor/BroadcastProvider';
 import { CalendarView } from './CalendarView';
+import { DatabaseCollectionView } from './DatabaseCollectionView';
 import { WorkspaceYjsStore } from './workspaceYjs';
 import { downloadJson, pageExport, pageSearchText, workspaceExport } from './exportJson';
 import {
@@ -18,7 +19,7 @@ import {
 import { ROOM_NAMES } from './yjs/model';
 import { executeViewQuery } from './viewQuery';
 
-type View = 'board' | 'calendar' | 'page';
+type View = WorkspaceResource['type'] | 'page';
 
 const STORAGE_KEY = 'notion-pages-real-v2';
 
@@ -44,7 +45,8 @@ function isCurrentResource(resource: unknown): resource is WorkspaceResource {
   if (typeof candidate.id !== 'string' || typeof candidate.title !== 'string'
     || !Array.isArray(candidate.pageIds) || !Array.isArray(candidate.propertyIds)) return false;
   if (candidate.type === 'board') return typeof candidate.statusPropertyId === 'string';
-  return candidate.type === 'calendar' && typeof candidate.datePropertyId === 'string';
+  if (candidate.type === 'calendar' || candidate.type === 'timeline') return typeof candidate.datePropertyId === 'string';
+  return candidate.type === 'table' || candidate.type === 'list' || candidate.type === 'gallery';
 }
 
 function loadState(): { schema: NotionSchema; pages: NotionPageData[]; resources?: WorkspaceResource[] } {
@@ -189,7 +191,9 @@ export default function App() {
     : undefined;
   const statusOptions = statusDefinition?.type === 'status' ? statusDefinition.options : [];
   const boardStatusDefinitions = activeSchema.properties.filter((property) => property.type === 'status');
-  const boardVisiblePropertyIds = activeSchema.properties.slice(0, 4).map((property) => property.id);
+  const boardVisiblePropertyIds = activeResource?.projection?.propertyIds?.length
+    ? activeResource.projection.propertyIds
+    : activeSchema.properties.slice(0, 4).map((property) => property.id);
   const draggingPage = draggingId ? pages.find((page) => page.id === draggingId) ?? null : null;
   const visiblePages = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('pt-BR');
@@ -271,7 +275,7 @@ export default function App() {
       resourceProperties.push(replacement);
       primaryPatch = { statusPropertyId: replacement.id } as Partial<WorkspaceResource>;
     }
-    if (resource.type === 'calendar' && !resourceProperties.some((property) => property.id === resource.datePropertyId && property.type === 'date')) {
+    if ((resource.type === 'calendar' || resource.type === 'timeline') && !resourceProperties.some((property) => property.id === resource.datePropertyId && property.type === 'date')) {
       const replacement = buildProperty('date', resource.title + ' Data');
       resourceProperties.push(replacement);
       primaryPatch = { datePropertyId: replacement.id } as Partial<WorkspaceResource>;
@@ -422,22 +426,36 @@ export default function App() {
     updateProperty(pageId, datePropertyId, { ...normalized, start, end, allDay: start.length <= 10 });
   }
 
-  function createResource(type: WorkspaceResource['type'], title: string, existingDatePropertyId?: string) {
-    const existingDate = type === 'calendar' && existingDatePropertyId
-      ? schemaCatalog.properties.find((property) => property.id === existingDatePropertyId && property.type === 'date')
+  function createResource(type: WorkspaceResource['type'], title: string, existingDatePropertyId?: string, sourceDataSourceId?: string) {
+    const usesDate = type === 'calendar' || type === 'timeline';
+    const selectedOwner = sourceDataSourceId ? resources.find((resource) => resource.dataSourceId === sourceDataSourceId) : undefined;
+    const selectedSchema = selectedOwner ? dataSourceSchemas[selectedOwner.dataSourceId] ?? { properties: [] } : undefined;
+    const existingDate = usesDate && existingDatePropertyId
+      ? (selectedSchema ?? schemaCatalog).properties.find((property) => property.id === existingDatePropertyId && property.type === 'date')
       : undefined;
-    const primary = existingDate ?? buildProperty(type === 'board' ? 'status' : 'date', type === 'board' ? `${title} Status` : `${title} Data`);
-    const owner = existingDate
+    const existingStatus = type === 'board' ? selectedSchema?.properties.find((property) => property.type === 'status') : undefined;
+    const existingSourceDate = usesDate ? selectedSchema?.properties.find((property) => property.type === 'date') : undefined;
+    const primary = existingStatus ?? existingDate ?? existingSourceDate ?? buildProperty(
+      type === 'board' ? 'status' : usesDate ? 'date' : 'text',
+      type === 'board' ? `${title} Status` : usesDate ? `${title} Data` : 'Nota',
+    );
+    const owner = selectedOwner ?? (existingDate
       ? resources.find((resource) => resource.propertyIds.includes(existingDate.id))
-      : undefined;
+      : undefined);
     const initialDefinitions = owner ? [] : buildInitialDataSourceProperties(primary);
     const propertyIds = owner?.propertyIds ?? initialDefinitions.map((property) => property.id);
     const databaseId = owner?.databaseId ?? createId('database');
     const dataSourceId = owner?.dataSourceId ?? createId('datasource');
     const id = createId(type);
+    const base = { id, databaseId, dataSourceId, title, pageIds: owner?.pageIds ?? [], propertyIds };
+    const projection = { propertyIds, openMode: 'full_page' as const, cardPreview: type === 'gallery' ? 'cover' as const : 'none' as const };
     const resource: WorkspaceResource = type === 'board'
-      ? { id, databaseId, dataSourceId, type, title, pageIds: [], propertyIds, statusPropertyId: primary.id, group: { propertyId: primary.id }, projection: { propertyIds, openMode: 'full_page', cardPreview: 'content' } }
-      : { id, databaseId, dataSourceId, type, title, pageIds: owner?.pageIds ?? [], propertyIds, datePropertyId: primary.id, timezone: 'America/Sao_Paulo', defaultView: 'month', visibleHours: { from: 7, to: 21 }, projection: { propertyIds, openMode: 'full_page', cardPreview: 'none' } };
+      ? { ...base, type, statusPropertyId: primary.id, group: { propertyId: primary.id }, projection: { ...projection, cardPreview: 'content' } }
+      : type === 'calendar'
+        ? { ...base, type, datePropertyId: primary.id, timezone: 'America/Sao_Paulo', defaultView: 'month', visibleHours: { from: 7, to: 21 }, projection }
+        : type === 'timeline'
+          ? { ...base, type, datePropertyId: primary.id, timezone: 'America/Sao_Paulo', projection }
+          : { ...base, type, projection };
     workspaceStoreRef.current?.createResource(resource, initialDefinitions);
     setActiveResourceId(resource.id);
     setView(type);
@@ -519,7 +537,7 @@ export default function App() {
         <div className="lab-sidebar-label"><span>APPS</span><button type="button" title="Novo board" onClick={() => setCreatingType('board')}><Plus size={13} /></button></div>
         {resources.map((resource) => (
           <div key={resource.id} className={`lab-resource-row${view === resource.type && activeResource?.id === resource.id ? ' is-active' : ''}`}>
-            <button type="button" title={resource.title} onClick={() => openResource(resource)} onDoubleClick={() => renameResource(resource)}>{resource.type === 'calendar' ? <CalendarDays size={14} /> : <span className="lab-nav-symbol">▦</span>}<span>{resource.title}</span></button>
+            <button type="button" title={resource.title} onClick={() => openResource(resource)} onDoubleClick={() => renameResource(resource)}>{resource.type === 'calendar' ? <CalendarDays size={14} /> : resource.type === 'timeline' ? <CalendarRange size={14} /> : resource.type === 'table' ? <Table2 size={14} /> : resource.type === 'list' ? <List size={14} /> : resource.type === 'gallery' ? <Images size={14} /> : <span className="lab-nav-symbol">▦</span>}<span>{resource.title}</span></button>
             <button type="button" title="Renomear" onClick={() => renameResource(resource)}>✎</button>
             <button type="button" title="Excluir" onClick={() => deleteResource(resource)}><Trash2 size={12} /></button>
           </div>
@@ -527,6 +545,10 @@ export default function App() {
         <div className="lab-sidebar-create">
           <button type="button" title="Novo board" onClick={() => setCreatingType('board')}><Plus size={13} /><span>Board</span></button>
           <button type="button" title="Novo calendario" onClick={() => setCreatingType('calendar')}><Plus size={13} /><span>Calendario</span></button>
+          <button type="button" title="Nova tabela" onClick={() => setCreatingType('table')}><Plus size={13} /><span>Tabela</span></button>
+          <button type="button" title="Nova lista" onClick={() => setCreatingType('list')}><Plus size={13} /><span>Lista</span></button>
+          <button type="button" title="Nova galeria" onClick={() => setCreatingType('gallery')}><Plus size={13} /><span>Galeria</span></button>
+          <button type="button" title="Nova timeline" onClick={() => setCreatingType('timeline')}><Plus size={13} /><span>Timeline</span></button>
         </div>
         <div className="lab-sidebar-label"><span>PAGINAS</span><button type="button" title="Nova pagina independente" onClick={() => createPage()}><Plus size={13} /></button></div>
         <div className="lab-page-list">
@@ -644,6 +666,18 @@ export default function App() {
           />
         )}
 
+        {(view === 'table' || view === 'list' || view === 'gallery' || view === 'timeline')
+          && activeResource && activeResource.type === view ? (
+          <DatabaseCollectionView
+            resource={activeResource}
+            schema={activeSchema}
+            pages={activePages}
+            onOpenPage={(pageId) => { setOpenId(pageId); setView('page'); }}
+            onCreatePage={() => createPage(undefined, undefined, activeResource.id)}
+            onPropertyChange={updateProperty}
+          />
+        ) : null}
+
         {view === 'page' && openPage && (
           <section className="lab-page-stage">
             <div className="lab-page-toolbar">
@@ -678,7 +712,17 @@ export default function App() {
           </section>
         )}
       </main>
-      {creatingType ? <CreateResourceDialog type={creatingType} schema={schemaCatalog} onClose={() => setCreatingType(null)} onCreate={createResource} /> : null}
+      {creatingType ? <CreateResourceDialog
+        type={creatingType}
+        schema={schemaCatalog}
+        sources={[...new Map(resources.map((resource) => [resource.dataSourceId, resource])).values()].map((resource) => ({
+          id: resource.dataSourceId,
+          title: resource.title,
+          schema: dataSourceSchemas[resource.dataSourceId] ?? { properties: [] },
+        }))}
+        onClose={() => setCreatingType(null)}
+        onCreate={createResource}
+      /> : null}
       {moveDialogOpen && openPageDataSourceId ? <MovePageDialog
         sourceSchema={openPageSchema}
         sourceDataSourceId={openPageDataSourceId}
@@ -740,11 +784,26 @@ function MovePageDialog({ sourceSchema, sourceDataSourceId, targets, onClose, on
   </div>;
 }
 
-function CreateResourceDialog({ type, schema, onClose, onCreate }: { type: WorkspaceResource['type']; schema: NotionSchema; onClose: () => void; onCreate: (type: WorkspaceResource['type'], title: string, existingDatePropertyId?: string) => void }) {
-  const [title, setTitle] = useState(type === 'board' ? 'Novo board' : 'Novo calendario');
+function CreateResourceDialog({ type, schema, sources, onClose, onCreate }: {
+  type: WorkspaceResource['type'];
+  schema: NotionSchema;
+  sources: Array<{ id: string; title: string; schema: NotionSchema }>;
+  onClose: () => void;
+  onCreate: (type: WorkspaceResource['type'], title: string, existingDatePropertyId?: string, sourceDataSourceId?: string) => void;
+}) {
+  const labels: Record<WorkspaceResource['type'], string> = { board: 'Board', calendar: 'Calendario', table: 'Tabela', list: 'Lista', gallery: 'Galeria', timeline: 'Timeline' };
+  const label = labels[type];
+  const [title, setTitle] = useState(`Novo ${label.toLocaleLowerCase()}`);
+  const compatibleSources = sources.filter((source) => type === 'board'
+    ? source.schema.properties.some((property) => property.type === 'status')
+    : type === 'calendar' || type === 'timeline'
+      ? source.schema.properties.some((property) => property.type === 'date')
+      : true);
+  const [sourceId, setSourceId] = useState('new');
   const [datePropertyId, setDatePropertyId] = useState('new');
-  const dates = schema.properties.filter((property) => property.type === 'date');
-  return <div className="lab-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><form className="lab-dialog" onSubmit={(event) => { event.preventDefault(); if (title.trim()) onCreate(type, title.trim(), datePropertyId === 'new' ? undefined : datePropertyId); }}><header><span>{type === 'board' ? '▦' : '▣'}</span><div><strong>Novo {type === 'board' ? 'Board' : 'Calendario'}</strong><small>Crie uma entidade independente no workspace.</small></div></header><label>Titulo<input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label>{type === 'calendar' ? <label>Propriedade de data<select value={datePropertyId} onChange={(event) => setDatePropertyId(event.target.value)}><option value="new">Criar nova propriedade</option>{dates.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}</select></label> : null}<footer><button type="button" onClick={onClose}>Cancelar</button><button type="submit">Criar</button></footer></form></div>;
+  const selectedSource = compatibleSources.find((source) => source.id === sourceId);
+  const dates = (selectedSource?.schema ?? schema).properties.filter((property) => property.type === 'date');
+  return <div className="lab-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><form className="lab-dialog" onSubmit={(event) => { event.preventDefault(); if (title.trim()) onCreate(type, title.trim(), datePropertyId === 'new' ? undefined : datePropertyId, sourceId === 'new' ? undefined : sourceId); }}><header><span>{type === 'board' ? '▦' : type === 'table' ? '▤' : type === 'list' ? '☷' : type === 'gallery' ? '▦' : '▣'}</span><div><strong>Nova view: {label}</strong><small>Crie uma fonte independente ou use uma Data Source existente.</small></div></header><label>Titulo<input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>Data Source<select value={sourceId} onChange={(event) => { setSourceId(event.target.value); setDatePropertyId('new'); }}><option value="new">Nova fonte de dados</option>{compatibleSources.map((source) => <option key={source.id} value={source.id}>{source.title}</option>)}</select></label>{type === 'calendar' || type === 'timeline' ? <label>Propriedade de data<select value={datePropertyId} onChange={(event) => setDatePropertyId(event.target.value)}><option value="new">{sourceId === 'new' ? 'Criar nova propriedade' : 'Usar primeira propriedade disponível'}</option>{dates.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}</select></label> : null}<footer><button type="button" onClick={onClose}>Cancelar</button><button type="submit">Criar</button></footer></form></div>;
 }
 
 function EmbeddedPagePreview({ schema, page }: { schema: NotionSchema; page: NotionPageData }) {

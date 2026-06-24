@@ -6,7 +6,7 @@ import {
   createId, DEFAULT_TIMEZONE, convertPropertyValue, emptyValueFor, type BoardResource,
   type CalendarResource, type DatabaseContainer, type DataSourceReference,
   type MoveOperation, type PageOwnership, type PropertyMapping, type SerializedRowSnapshot,
-  type WorkspaceResource,
+  type TimelineResource, type WorkspaceResource,
 } from './domain';
 import { ROOM_NAMES } from './yjs/model';
 
@@ -32,7 +32,7 @@ export interface RoomProvider { destroy(): void; }
 export type RoomProviderFactory = (room: string, document: Doc) => RoomProvider;
 
 type ResourceInput = {
-  id: string; databaseId?: string; dataSourceId?: string; type: 'board' | 'calendar'; title: string; pageIds: string[]; propertyIds?: string[];
+  id: string; databaseId?: string; dataSourceId?: string; type: WorkspaceResource['type']; title: string; pageIds: string[]; propertyIds?: string[];
   statusPropertyId?: string; datePropertyId?: string; timezone?: string;
   defaultView?: CalendarResource['defaultView']; visibleHours?: CalendarResource['visibleHours'];
 };
@@ -131,8 +131,15 @@ function normalizeResource(resource: ResourceInput, schema: NotionSchema): Works
     const statusPropertyId = resource.statusPropertyId ?? schema.properties.find((property) => property.type === 'status')?.id;
     return statusPropertyId ? { ...resource, databaseId, dataSourceId, type: 'board', propertyIds, statusPropertyId } as BoardResource : null;
   }
+  if (resource.type === 'table' || resource.type === 'list' || resource.type === 'gallery') {
+    return { ...resource, databaseId, dataSourceId, type: resource.type, propertyIds };
+  }
   const datePropertyId = resource.datePropertyId ?? schema.properties.find((property) => property.type === 'date')?.id;
   if (!datePropertyId) return null;
+  if (resource.type === 'timeline') return {
+    ...resource, databaseId, dataSourceId, type: 'timeline', propertyIds, datePropertyId,
+    timezone: resource.timezone ?? DEFAULT_TIMEZONE,
+  } as TimelineResource;
   return {
     ...resource, databaseId, dataSourceId, type: 'calendar', propertyIds, datePropertyId,
     timezone: resource.timezone ?? DEFAULT_TIMEZONE,
@@ -155,11 +162,14 @@ function writeResource(map: YMap<unknown>, resource: WorkspaceResource): void {
     else map.set(field, JSON.stringify(resource[field]));
   });
   if (resource.type === 'board') map.set('statusPropertyId', resource.statusPropertyId);
-  else {
+  else if (resource.type === 'calendar') {
     map.set('datePropertyId', resource.datePropertyId);
     map.set('timezone', resource.timezone);
     map.set('defaultView', resource.defaultView);
     map.set('visibleHours', resource.visibleHours);
+  } else if (resource.type === 'timeline') {
+    map.set('datePropertyId', resource.datePropertyId);
+    map.set('timezone', resource.timezone);
   }
   map.delete('pageIds');
 }
@@ -195,6 +205,13 @@ function readStoredResource(id: string, map: YMap<unknown>, databaseId: string, 
       visibleHours: (map.get('visibleHours') as CalendarResource['visibleHours']) ?? { from: 7, to: 21 },
     };
   }
+  if (type === 'timeline') {
+    const datePropertyId = map.get('datePropertyId');
+    return typeof datePropertyId === 'string' ? {
+      ...base, type, datePropertyId, timezone: String(map.get('timezone') ?? DEFAULT_TIMEZONE),
+    } : null;
+  }
+  if (type === 'table' || type === 'list' || type === 'gallery') return { ...base, type };
   return null;
 }
 
@@ -497,7 +514,15 @@ export class WorkspaceYjsStore {
         propertyIds: status ? [status.id] : [], statusPropertyId: status?.id ?? 'status',
       };
     }
+    if (reference.type === 'table' || reference.type === 'list' || reference.type === 'gallery') return {
+      id: reference.id, databaseId, dataSourceId, type: reference.type, title: reference.type,
+      pageIds: [], propertyIds: schema.properties.map((property) => property.id),
+    };
     const date = schema.properties.find((property) => property.type === 'date');
+    if (reference.type === 'timeline') return {
+      id: reference.id, databaseId, dataSourceId, type: 'timeline', title: 'Timeline', pageIds: [],
+      propertyIds: date ? [date.id] : [], datePropertyId: date?.id ?? 'date', timezone: DEFAULT_TIMEZONE,
+    };
     return {
       id: reference.id, databaseId, dataSourceId, type: 'calendar', title: 'Calendario', pageIds: [],
       propertyIds: date ? [date.id] : [], datePropertyId: date?.id ?? 'date',

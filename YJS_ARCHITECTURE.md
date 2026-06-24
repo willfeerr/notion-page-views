@@ -40,6 +40,14 @@ Status option IDs remain stable when a lane is renamed. Changing a page status u
 
 A view points to one database container through `databaseId` and one source through `dataSourceId`. Its page list is derived from rows whose canonical ownership points to that source. Views never persist a membership copy.
 
+Board, Calendar, Table, List, Gallery and Timeline use this same reference contract. Table is the canonical
+row-oriented interface; the other types are projections over the same query result. Creating a view can either
+allocate a new Data Source or select a compatible existing source, without copying rows.
+
+Every view may persist a nested `FilterGroup` AST, ordered sorts, group/subgroup definitions and a projection
+containing visible property IDs, card preview and page open mode. The shared query executor applies filters and
+sorts before the presentation component renders the rows.
+
 Board ordering is stored as a rank keyed by `viewId` on the data-source row. Moving a card can update its grouping property and rank in one data-source transaction.
 
 A calendar created from an existing date property becomes another view of the owning database. A calendar with a new date property creates a new database.

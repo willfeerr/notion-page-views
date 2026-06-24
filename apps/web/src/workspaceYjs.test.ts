@@ -363,6 +363,24 @@ describe('WorkspaceYjsStore', () => {
     });
   });
 
+  it('persists table, list, gallery and timeline as views of one data source', () => {
+    const persisted = new Map<string, Doc>();
+    const store = createStore(undefined, persisted);
+    store.initialize({ schema, pages: [page] });
+    store.createResource({ id: 'table-shared', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'table', title: 'Table', pageIds: [], propertyIds: ['status', 'score'] });
+    store.createResource({ id: 'list-shared', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'list', title: 'List', pageIds: [], propertyIds: ['score'] });
+    store.createResource({ id: 'gallery-shared', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'gallery', title: 'Gallery', pageIds: [], propertyIds: ['status'] });
+    store.createResource({ id: 'timeline-shared', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'timeline', title: 'Timeline', pageIds: [], propertyIds: ['due'], datePropertyId: 'due', timezone: 'America/Sao_Paulo' });
+    expect(store.read().resources?.filter((item) => item.id.endsWith('-shared')).every((item) => item.pageIds.includes('page-1'))).toBe(true);
+    store.destroy();
+
+    const restored = createStore(undefined, persisted);
+    restored.initialize({ schema, pages: [page] });
+    expect(restored.read().resources?.filter((item) => item.id.endsWith('-shared')).map((item) => item.type)).toEqual([
+      'table', 'list', 'gallery', 'timeline',
+    ]);
+  });
+
   it('migrates database v2 to data source v1 idempotently without losing values', () => {
     const schemaWithAudit: NotionSchema = {
       properties: [
