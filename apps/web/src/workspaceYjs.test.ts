@@ -159,6 +159,78 @@ describe('WorkspaceYjsStore', () => {
     expect(state.pages.find((item) => item.id === 'standalone')?.properties.status).toBe('todo');
   });
 
+  it('persists and resumes each phase of a page move', () => {
+    const persisted = new Map<string, Doc>();
+    const first = createStore(undefined, persisted);
+    first.initialize({ schema, pages: [page] });
+    first.insertPage({ ...page, id: 'resumable', properties: {} });
+    const operation = first.prepareMove('resumable', 'roadmap');
+    expect(operation?.status).toBe('prepared');
+    expect(first.advanceMove(operation!.id)?.status).toBe('staged');
+    first.destroy();
+
+    const second = createStore(undefined, persisted);
+    second.initialize({ schema, pages: [page] });
+    expect(second.advanceMove(operation!.id)?.status).toBe('committed');
+    second.destroy();
+
+    const third = createStore(undefined, persisted);
+    third.initialize({ schema, pages: [page] });
+    expect(third.advanceMove(operation!.id)?.status).toBe('cleaned');
+    expect(third.read().ownership?.resumable).toMatchObject({ dataSourceId: 'roadmap', version: 2 });
+    expect(third.read().moveOperations?.find((item) => item.id === operation!.id)?.status).toBe('cleaned');
+  });
+
+  it('maps compatible properties, archives unmatched values and supports undo', () => {
+    const store = createStore();
+    store.initialize({ schema, pages: [page] });
+    const targetSchema: NotionSchema = {
+      properties: [
+        { id: 'target-score', name: 'Score', type: 'number' },
+        { id: 'target-note', name: 'Note', type: 'text' },
+      ],
+    };
+    store.createResource({
+      id: 'target-calendar', databaseId: 'target-db', dataSourceId: 'target-source', type: 'calendar',
+      title: 'Target', pageIds: [], propertyIds: ['target-note'], datePropertyId: 'target-note',
+      timezone: 'America/Sao_Paulo', defaultView: 'month', visibleHours: { from: 8, to: 18 },
+    }, targetSchema.properties);
+
+    const operation = store.prepareMove('page-1', 'target-source');
+    expect(operation?.propertyMapping).toContainEqual({
+      sourcePropertyId: 'score', targetPropertyId: 'target-score', conversion: 'convert',
+    });
+    expect(operation?.propertyMapping).toContainEqual({ sourcePropertyId: 'status', conversion: 'archive' });
+    expect(store.commitMove(operation!.id)?.status).toBe('cleaned');
+    expect(store.read().pages.find((item) => item.id === 'page-1')?.properties).toMatchObject({ 'target-score': 42 });
+
+    expect(store.undoMove(operation!.id)?.status).toBe('undone');
+    expect(store.read().ownership?.['page-1']).toMatchObject({ dataSourceId: 'roadmap', version: 3 });
+    expect(store.read().pages.find((item) => item.id === 'page-1')?.properties).toMatchObject(page.properties);
+  });
+
+  it('lets only one concurrent move commit from the same ownership version', () => {
+    const store = createStore();
+    store.initialize({ schema, pages: [page] });
+    const status = schema.properties[0];
+    store.createResource({
+      id: 'other-board', databaseId: 'other-db', dataSourceId: 'other-source', type: 'board', title: 'Other',
+      pageIds: [], propertyIds: [status.id], statusPropertyId: status.id,
+    }, [status]);
+    store.createResource({
+      id: 'third-board', databaseId: 'third-db', dataSourceId: 'third-source', type: 'board', title: 'Third',
+      pageIds: [], propertyIds: [status.id], statusPropertyId: status.id,
+    }, [status]);
+    const first = store.prepareMove('page-1', 'other-source')!;
+    const second = store.prepareMove('page-1', 'third-source')!;
+    store.advanceMove(first.id);
+    store.advanceMove(second.id);
+    expect(store.advanceMove(first.id)?.status).toBe('committed');
+    expect(store.advanceMove(second.id)?.status).toBe('conflicted');
+    expect(store.commitMove(first.id)?.status).toBe('cleaned');
+    expect(store.read().ownership?.['page-1'].dataSourceId).toBe('other-source');
+  });
+
   it('keeps pages and schemas isolated between newly created databases', () => {
     const store = createStore();
     store.initialize({ schema, pages: [page] });

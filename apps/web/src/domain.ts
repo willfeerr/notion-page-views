@@ -53,8 +53,14 @@ export interface PageOwnership {
 export interface SerializedRowSnapshot {
   page: {
     id: string;
+    icon?: string | null;
+    coverUrl?: string | null;
+    coverPosition?: number;
     title: string;
     properties: Record<string, StoredPropertyValue>;
+    contentPreview?: string;
+    createdTime: string;
+    lastEditedTime: string;
   };
   schema: NotionSchema;
 }
@@ -73,7 +79,11 @@ export interface MoveOperation {
   expectedParentVersion: number;
   propertyMapping: PropertyMapping[];
   sourceSnapshot: SerializedRowSnapshot;
-  status: 'prepared' | 'staged' | 'committed' | 'cleaned';
+  status: 'prepared' | 'staged' | 'committed' | 'cleaned' | 'conflicted' | 'undone';
+  createdAt: string;
+  updatedAt: string;
+  conflictReason?: string;
+  undoOf?: string;
 }
 
 export function createId(prefix: string): string {

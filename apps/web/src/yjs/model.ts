@@ -1,5 +1,6 @@
 export const ROOM_NAMES = {
   workspace: 'workspace:notion-pages-lab',
+  operations: 'operations:notion-pages-lab:v1',
   legacyDatabase: 'database:roadmap',
   legacyDataSource: (dataSourceId: string) => `database:${dataSourceId}:v2`,
   database: (databaseId: string) => `database:${databaseId}:v1`,

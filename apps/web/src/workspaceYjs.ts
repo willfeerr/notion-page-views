@@ -3,9 +3,10 @@ import type { SerializedEditorState } from 'lexical';
 import type { NotionPageData, NotionSchema, PropertyDefinition, StoredPropertyValue } from '../notion-page/types';
 import { getPlainTextPreview } from '../notion-page/editor/getPlainTextPreview';
 import {
-  DEFAULT_TIMEZONE, convertPropertyValue, emptyValueFor, type BoardResource,
+  createId, DEFAULT_TIMEZONE, convertPropertyValue, emptyValueFor, type BoardResource,
   type CalendarResource, type DatabaseContainer, type DataSourceReference,
-  type PageOwnership, type WorkspaceResource,
+  type MoveOperation, type PageOwnership, type PropertyMapping, type SerializedRowSnapshot,
+  type WorkspaceResource,
 } from './domain';
 import { ROOM_NAMES } from './yjs/model';
 
@@ -24,6 +25,7 @@ export interface WorkspaceState {
   /** Schema resolved from the owning data source for each page. */
   pageSchemas?: Record<string, NotionSchema>;
   dataSourceSchemas?: Record<string, NotionSchema>;
+  moveOperations?: MoveOperation[];
 }
 
 export interface RoomProvider { destroy(): void; }
@@ -260,6 +262,9 @@ function replaceDataSource(room: DataSourceRoom, state: Pick<WorkspaceSeed, 'sch
 export class WorkspaceYjsStore {
   private readonly workspaceDocument = new Doc();
   private readonly workspaceProvider: RoomProvider;
+  private readonly operationsDocument = new Doc();
+  private readonly operationsProvider: RoomProvider;
+  private readonly moveOperations = this.operationsDocument.getMap<string>('moves');
   private readonly references = this.workspaceDocument.getMap<string>('resource-references');
   private readonly resourceOrder = this.workspaceDocument.getArray<string>('resource-order');
   private readonly databaseReferences = this.workspaceDocument.getMap<string>('database-references');
@@ -277,7 +282,9 @@ export class WorkspaceYjsStore {
 
   constructor(private readonly createProvider: RoomProviderFactory) {
     this.workspaceProvider = createProvider(ROOM_NAMES.workspace, this.workspaceDocument);
+    this.operationsProvider = createProvider(ROOM_NAMES.operations, this.operationsDocument);
     this.workspaceDocument.on('afterTransaction', this.handleWorkspaceTransaction);
+    this.operationsDocument.on('afterTransaction', this.publish);
   }
 
   private handleWorkspaceTransaction = (): void => {
@@ -565,6 +572,10 @@ export class WorkspaceYjsStore {
     return {
       pages, resources: this.readResources(), pageSchemas, dataSourceSchemas,
       databases, dataSources: this.readDataSourceReferences(), ownership,
+      moveOperations: [...this.moveOperations.values()].flatMap((value) => {
+        const operation = safeJson<MoveOperation>(value);
+        return operation ? [operation] : [];
+      }).sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
     };
   }
 
@@ -844,50 +855,224 @@ export class WorkspaceYjsStore {
     }, 'resource-create');
   }
 
+  private writeMoveOperation(operation: MoveOperation): void {
+    this.operationsDocument.transact(() => {
+      this.moveOperations.set(operation.id, JSON.stringify(operation));
+    }, 'move-operation-change');
+  }
+
+  private readMoveOperation(operationId: string): MoveOperation | null {
+    return safeJson<MoveOperation>(this.moveOperations.get(operationId));
+  }
+
+  private snapshotPage(pageId: string): SerializedRowSnapshot | null {
+    const source = this.findPageRoom(pageId);
+    const pageMap = source?.pages.get(pageId);
+    if (!source || !pageMap) return null;
+    const page = readPage(pageId, pageMap, this.initialContent.get(pageId) ?? null);
+    return {
+      page: {
+        id: page.id,
+        icon: page.icon,
+        coverUrl: page.coverUrl,
+        coverPosition: page.coverPosition,
+        title: page.title,
+        properties: page.properties,
+        contentPreview: page.contentPreview,
+        createdTime: page.createdTime,
+        lastEditedTime: page.lastEditedTime,
+      },
+      schema: roomSchema(source),
+    };
+  }
+
+  private defaultPropertyMapping(source: NotionSchema, target: NotionSchema): PropertyMapping[] {
+    const claimedTargets = new Set<string>();
+    return source.properties.map((definition) => {
+      const byId = target.properties.find((candidate) => candidate.id === definition.id && candidate.type === definition.type);
+      const normalizedName = definition.name.trim().toLocaleLowerCase();
+      const byName = target.properties.find((candidate) => (
+        !claimedTargets.has(candidate.id)
+        && candidate.name.trim().toLocaleLowerCase() === normalizedName
+      ));
+      const candidate = byId ?? byName;
+      if (!candidate) return { sourcePropertyId: definition.id, conversion: 'archive' };
+      claimedTargets.add(candidate.id);
+      return {
+        sourcePropertyId: definition.id,
+        targetPropertyId: candidate.id,
+        conversion: candidate.type === definition.type ? 'direct' : 'convert',
+      };
+    });
+  }
+
+  prepareMove(pageId: string, targetDataSourceId: string, propertyMapping?: PropertyMapping[]): MoveOperation | null {
+    const ownership = this.readOwnership(pageId);
+    const target = this.dataSourceRooms.get(targetDataSourceId);
+    const snapshot = this.snapshotPage(pageId);
+    if (!ownership || !target || !snapshot || ownership.dataSourceId === targetDataSourceId) return null;
+    const now = new Date().toISOString();
+    const operation: MoveOperation = {
+      id: createId('move'),
+      pageId,
+      sourceDataSourceId: ownership.dataSourceId,
+      targetDataSourceId,
+      expectedParentVersion: ownership.version,
+      propertyMapping: propertyMapping ?? this.defaultPropertyMapping(snapshot.schema, roomSchema(target)),
+      sourceSnapshot: snapshot,
+      status: 'prepared',
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.writeMoveOperation(operation);
+    return operation;
+  }
+
+  private mappedPage(operation: MoveOperation, targetSchema: NotionSchema): NotionPageData {
+    const sourceDefinitions = new Map(operation.sourceSnapshot.schema.properties.map((definition) => [definition.id, definition]));
+    const mappings = new Map(operation.propertyMapping.flatMap((mapping) => (
+      mapping.targetPropertyId && mapping.conversion !== 'archive' ? [[mapping.targetPropertyId, mapping] as const] : []
+    )));
+    const sourcePage = operation.sourceSnapshot.page;
+    const properties = Object.fromEntries(targetSchema.properties.map((definition) => {
+      const mapping = mappings.get(definition.id);
+      if (mapping) {
+        const previous = sourceDefinitions.get(mapping.sourcePropertyId);
+        const value = sourcePage.properties[mapping.sourcePropertyId];
+        return [definition.id, convertPropertyValue(definition, previous, value)];
+      }
+      if (definition.type === 'created_time') return [definition.id, sourcePage.createdTime];
+      if (definition.type === 'last_edited_time') return [definition.id, sourcePage.lastEditedTime];
+      return [definition.id, emptyValueFor(definition)];
+    }));
+    return { ...sourcePage, properties, content: this.initialContent.get(operation.pageId) ?? null };
+  }
+
+  private markMoveConflict(operation: MoveOperation, reason: string): MoveOperation {
+    const target = this.dataSourceRooms.get(operation.targetDataSourceId);
+    if (target && this.readOwnership(operation.pageId)?.dataSourceId !== target.id) {
+      target.document.transact(() => {
+        target.pages.delete(operation.pageId);
+        const index = target.pageOrder.toArray().indexOf(operation.pageId);
+        if (index >= 0) target.pageOrder.delete(index, 1);
+      }, 'page-move-conflict-cleanup');
+    }
+    const conflicted = { ...operation, status: 'conflicted' as const, conflictReason: reason, updatedAt: new Date().toISOString() };
+    this.writeMoveOperation(conflicted);
+    return conflicted;
+  }
+
+  /** Advances one durable phase. Repeating this after a crash is safe. */
+  advanceMove(operationId: string): MoveOperation | null {
+    const operation = this.readMoveOperation(operationId);
+    if (!operation || ['cleaned', 'conflicted', 'undone'].includes(operation.status)) return operation;
+    const source = this.dataSourceRooms.get(operation.sourceDataSourceId);
+    const target = this.dataSourceRooms.get(operation.targetDataSourceId);
+    if (!source || !target) return this.markMoveConflict(operation, 'Data Source de origem ou destino indisponivel.');
+    const ownership = this.readOwnership(operation.pageId);
+
+    if (operation.status === 'prepared') {
+      if (!ownership || ownership.dataSourceId !== source.id || ownership.version !== operation.expectedParentVersion) {
+        return this.markMoveConflict(operation, 'O ownership da pagina mudou antes do staging.');
+      }
+      const page = this.mappedPage(operation, roomSchema(target));
+      target.document.transact(() => {
+        target.pages.set(operation.pageId, createPageMap(page));
+        if (!target.pageOrder.toArray().includes(operation.pageId)) target.pageOrder.push([operation.pageId]);
+        const targetMap = target.pages.get(operation.pageId);
+        const archived = new YMap<StoredPropertyValue>();
+        operation.propertyMapping.filter((mapping) => mapping.conversion === 'archive').forEach((mapping) => {
+          archived.set(mapping.sourcePropertyId, operation.sourceSnapshot.page.properties[mapping.sourcePropertyId]);
+        });
+        if (archived.size) targetMap?.set('archivedProperties', archived);
+      }, 'page-move-stage');
+      const staged = { ...operation, status: 'staged' as const, updatedAt: new Date().toISOString() };
+      this.writeMoveOperation(staged);
+      return staged;
+    }
+
+    if (operation.status === 'staged') {
+      if (ownership?.dataSourceId === target.id && ownership.version === operation.expectedParentVersion + 1) {
+        const committed = { ...operation, status: 'committed' as const, updatedAt: new Date().toISOString() };
+        this.writeMoveOperation(committed);
+        return committed;
+      }
+      if (!ownership || ownership.dataSourceId !== source.id || ownership.version !== operation.expectedParentVersion) {
+        return this.markMoveConflict(operation, 'Outra movimentacao alterou o ownership da pagina.');
+      }
+      this.workspaceDocument.transact(() => this.setOwnership(operation.pageId, target.id), 'page-move-ownership-commit');
+      const committed = { ...operation, status: 'committed' as const, updatedAt: new Date().toISOString() };
+      this.writeMoveOperation(committed);
+      return committed;
+    }
+
+    if (ownership?.dataSourceId !== target.id) {
+      return this.markMoveConflict(operation, 'O ownership mudou antes da limpeza da origem.');
+    }
+    source.document.transact(() => {
+      source.pages.delete(operation.pageId);
+      const index = source.pageOrder.toArray().indexOf(operation.pageId);
+      if (index >= 0) source.pageOrder.delete(index, 1);
+    }, 'page-move-source-cleanup');
+    const cleaned = { ...operation, status: 'cleaned' as const, updatedAt: new Date().toISOString() };
+    this.writeMoveOperation(cleaned);
+    return cleaned;
+  }
+
+  commitMove(operationId: string): MoveOperation | null {
+    let operation = this.readMoveOperation(operationId);
+    while (operation && !['cleaned', 'conflicted', 'undone'].includes(operation.status)) {
+      operation = this.advanceMove(operationId);
+    }
+    return operation;
+  }
+
+  undoMove(operationId: string): MoveOperation | null {
+    const operation = this.readMoveOperation(operationId);
+    if (!operation || operation.status !== 'cleaned') return operation;
+    const ownership = this.readOwnership(operation.pageId);
+    const source = this.dataSourceRooms.get(operation.sourceDataSourceId);
+    const target = this.dataSourceRooms.get(operation.targetDataSourceId);
+    if (!ownership || ownership.dataSourceId !== target?.id || !source) {
+      return this.markMoveConflict(operation, 'Nao foi possivel desfazer: a pagina ja mudou novamente.');
+    }
+    const restored: NotionPageData = {
+      ...operation.sourceSnapshot.page,
+      content: this.initialContent.get(operation.pageId) ?? null,
+    };
+    source.document.transact(() => {
+      source.pages.set(operation.pageId, createPageMap(restored));
+      if (!source.pageOrder.toArray().includes(operation.pageId)) source.pageOrder.push([operation.pageId]);
+    }, 'page-move-undo-stage');
+    this.workspaceDocument.transact(() => this.setOwnership(operation.pageId, source.id), 'page-move-undo-ownership');
+    target.document.transact(() => {
+      target.pages.delete(operation.pageId);
+      const index = target.pageOrder.toArray().indexOf(operation.pageId);
+      if (index >= 0) target.pageOrder.delete(index, 1);
+    }, 'page-move-undo-cleanup');
+    const undone = { ...operation, status: 'undone' as const, updatedAt: new Date().toISOString() };
+    this.writeMoveOperation(undone);
+    return undone;
+  }
+
   linkPage(resourceId: string, pageId: string): void {
     const resource = this.readResources().find((item) => item.id === resourceId);
     if (!resource || resource.pageIds.includes(pageId)) return;
-    const source = this.findPageRoom(pageId);
-    const target = this.dataSourceRooms.get(resource.dataSourceId);
-    const sourceMap = source?.pages.get(pageId);
-    if (!source || !target || !sourceMap) return;
-    const sourcePage = readPage(pageId, sourceMap, this.initialContent.get(pageId) ?? null);
-    const targetSchema = roomSchema(target);
-    sourcePage.properties = Object.fromEntries(targetSchema.properties.map((definition) => [
-      definition.id, sourcePage.properties[definition.id] ?? emptyValueFor(definition),
-    ]));
-    target.document.transact(() => {
-      target.pages.set(pageId, createPageMap(sourcePage));
-      if (!target.pageOrder.toArray().includes(pageId)) target.pageOrder.push([pageId]);
-    }, 'page-move-target');
-    this.workspaceDocument.transact(() => this.setOwnership(pageId, target.id), 'page-move-ownership-commit');
-    source.document.transact(() => {
-      source.pages.delete(pageId);
-      const index = source.pageOrder.toArray().indexOf(pageId);
-      if (index >= 0) source.pageOrder.delete(index, 1);
-    }, 'page-move-source');
+    const operation = this.prepareMove(pageId, resource.dataSourceId);
+    if (operation) this.commitMove(operation.id);
   }
 
   unlinkPage(resourceId: string, pageId: string): void {
     const resource = this.readResources().find((item) => item.id === resourceId);
     if (!resource?.pageIds.includes(pageId)) return;
-    const source = this.dataSourceRooms.get(resource.dataSourceId);
-    const sourceMap = source?.pages.get(pageId);
-    if (!source || !sourceMap) return;
+    const sourceMap = this.dataSourceRooms.get(resource.dataSourceId)?.pages.get(pageId);
+    if (!sourceMap) return;
     const page = readPage(pageId, sourceMap, this.initialContent.get(pageId) ?? null);
     const databaseId = 'page-properties-' + pageId;
     const dataSourceId = databaseId;
-    const target = this.ensureDataSourceRoom(dataSourceId, { schema: roomSchema(source), pages: [] }, databaseId, page.title || 'Propriedades da pagina');
-    target.document.transact(() => {
-      target.pages.set(pageId, createPageMap(page));
-      if (!target.pageOrder.toArray().includes(pageId)) target.pageOrder.push([pageId]);
-    }, 'page-unlink-target');
-    this.workspaceDocument.transact(() => this.setOwnership(pageId, dataSourceId), 'page-unlink-ownership-commit');
-    source.document.transact(() => {
-      source.pages.delete(pageId);
-      const index = source.pageOrder.toArray().indexOf(pageId);
-      if (index >= 0) source.pageOrder.delete(index, 1);
-    }, 'page-unlink-source');
+    this.ensureDataSourceRoom(dataSourceId, { schema: roomSchema(this.dataSourceRooms.get(resource.dataSourceId)!), pages: [] }, databaseId, page.title || 'Propriedades da pagina');
+    const operation = this.prepareMove(pageId, dataSourceId);
+    if (operation) this.commitMove(operation.id);
   }
 
   updateResource(resourceId: string, patch: Partial<WorkspaceResource>): void {
@@ -1055,8 +1240,11 @@ export class WorkspaceYjsStore {
     [...this.databaseRooms.keys()].forEach((id) => this.disposeDatabaseRoom(id));
     [...this.dataSourceRooms.keys()].forEach((id) => this.disposeDataSourceRoom(id));
     this.workspaceDocument.off('afterTransaction', this.handleWorkspaceTransaction);
+    this.operationsDocument.off('afterTransaction', this.publish);
     this.workspaceProvider.destroy();
+    this.operationsProvider.destroy();
     this.workspaceDocument.destroy();
+    this.operationsDocument.destroy();
     this.listeners.clear();
   }
 }

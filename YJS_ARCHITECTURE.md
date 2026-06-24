@@ -7,6 +7,7 @@ The workspace uses separate Yjs documents for navigation, database containers, d
 | Room | Canonical data | Excludes |
 |---|---|---|
 | `workspace:{workspaceId}` | Ordered container/data-source/view references, navigation and canonical `pageId -> dataSourceId` ownership | Schemas, rows, view configuration, page content |
+| `operations:{workspaceId}:v1` | Durable move journal, source snapshots, property mappings and saga phases | Canonical ownership and live rows |
 | `database:{databaseId}:v1` | Container metadata plus ordered data-source and view references | Property schema, rows and page content |
 | `datasource:{dataSourceId}:v1` | Property definitions, rows, property values and per-view ranks | View filters/layout and Lexical content |
 | `view:{viewId}` | `databaseId`, `dataSourceId`, view type, grouping/date property, visible properties and presentation settings | Row membership and page content |
@@ -85,7 +86,16 @@ Repeated initialization detects the migration marker and active data-source refe
 
 `page-ownership` in the workspace is the canonical visibility index. Reads and writes resolve the source from this index and never scan every room for the first physical copy.
 
-The current compatibility move stages the target row, commits ownership, then cleans the source. The domain now defines `MoveOperation`, `PropertyMapping` and recoverable row snapshots, but the durable operation journal, schema-mapping confirmation and undo protocol are intentionally deferred to the next phase.
+Because source, target and ownership are separate documents, moving a page uses an idempotent saga:
+
+1. `prepared` persists the complete source row/schema snapshot and property mapping.
+2. `staged` writes converted values to the target and archives unmapped values.
+3. `committed` compares and increments the canonical ownership version. This is the visibility commit point.
+4. `cleaned` removes the physical source row.
+
+The journal can resume an interrupted operation from any phase. A competing move with a stale ownership
+version becomes `conflicted` and removes its staged target row. A cleaned operation can be undone while
+the page remains at its target, restoring the original snapshot and incrementing ownership again.
 
 ## Hocuspocus
 
