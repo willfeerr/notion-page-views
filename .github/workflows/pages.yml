@@ -3,6 +3,8 @@ name: Deploy GitHub Pages
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -11,7 +13,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -22,20 +24,26 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+          package-manager-cache: false
       - name: Install dependencies
         run: npm install
       - name: Typecheck
         run: npm run typecheck
+      - name: Unit tests
+        run: npm run test:unit
       - name: Build
         run: npm run build
       - uses: actions/upload-pages-artifact@v4
         with:
-          path: dist
+          path: apps/web/dist
 
   deploy:
     needs: build
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'codex/stabilization-v3')
     environment:
-      name: github-pages
+      name: ${{ github.event_name == 'push' && 'github-pages' || 'github-pages-preview' }}
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
