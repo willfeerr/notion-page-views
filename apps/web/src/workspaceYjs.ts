@@ -4,23 +4,33 @@ import type { NotionPageData, NotionSchema, PropertyDefinition, StoredPropertyVa
 import { getPlainTextPreview } from '../notion-page/editor/getPlainTextPreview';
 import {
   DEFAULT_TIMEZONE, convertPropertyValue, emptyValueFor, type BoardResource,
-  type CalendarResource, type WorkspaceResource,
+  type CalendarResource, type DatabaseContainer, type DataSourceReference,
+  type PageOwnership, type WorkspaceResource,
 } from './domain';
 import { ROOM_NAMES } from './yjs/model';
 
-export interface WorkspaceState {
+export interface WorkspaceSeed {
   schema: NotionSchema;
   pages: NotionPageData[];
   resources?: WorkspaceResource[];
-  /** Schema resolved from the owning database for each page. */
+}
+
+export interface WorkspaceState {
+  pages: NotionPageData[];
+  resources?: WorkspaceResource[];
+  databases?: DatabaseContainer[];
+  dataSources?: DataSourceReference[];
+  ownership?: Record<string, PageOwnership>;
+  /** Schema resolved from the owning data source for each page. */
   pageSchemas?: Record<string, NotionSchema>;
+  dataSourceSchemas?: Record<string, NotionSchema>;
 }
 
 export interface RoomProvider { destroy(): void; }
 export type RoomProviderFactory = (room: string, document: Doc) => RoomProvider;
 
 type ResourceInput = {
-  id: string; databaseId?: string; type: 'board' | 'calendar'; title: string; pageIds: string[]; propertyIds?: string[];
+  id: string; databaseId?: string; dataSourceId?: string; type: 'board' | 'calendar'; title: string; pageIds: string[]; propertyIds?: string[];
   statusPropertyId?: string; datePropertyId?: string; timezone?: string;
   defaultView?: CalendarResource['defaultView']; visibleHours?: CalendarResource['visibleHours'];
 };
@@ -29,14 +39,10 @@ interface ResourceReference {
   id: string;
   type: WorkspaceResource['type'];
   databaseId: string;
+  dataSourceId: string;
 }
 
-interface DatabaseReference {
-  id: string;
-  title: string;
-}
-
-interface DatabaseRoom {
+interface DataSourceRoom {
   id: string;
   document: Doc;
   provider: RoomProvider;
@@ -44,6 +50,16 @@ interface DatabaseRoom {
   definitionOrder: YArray<string>;
   pages: YMap<YMap<unknown>>;
   pageOrder: YArray<string>;
+  onTransaction: () => void;
+}
+
+interface DatabaseContainerRoom {
+  id: string;
+  document: Doc;
+  provider: RoomProvider;
+  metadata: YMap<unknown>;
+  dataSourceIds: YArray<string>;
+  viewIds: YArray<string>;
   onTransaction: () => void;
 }
 
@@ -89,11 +105,11 @@ function defaultResources(schema: NotionSchema, pages: NotionPageData[]): Worksp
   const propertyIds = schema.properties.map((property) => property.id);
   const resources: WorkspaceResource[] = [];
   if (status) resources.push({
-    id: 'board-roadmap', databaseId: 'roadmap', type: 'board', title: 'Roadmap de produto',
+    id: 'board-roadmap', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'board', title: 'Roadmap de produto',
     pageIds: pages.map((page) => page.id), propertyIds, statusPropertyId: status.id,
   });
   if (date) resources.push({
-    id: 'calendar-product', databaseId: 'roadmap', type: 'calendar', title: 'Calendario de produto',
+    id: 'calendar-product', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'calendar', title: 'Calendario de produto',
     pageIds: pages.filter((page) => hasDateValue(page.properties[date.id])).map((page) => page.id),
     propertyIds, datePropertyId: date.id, timezone: date.timezone || DEFAULT_TIMEZONE,
     defaultView: 'month', visibleHours: { from: 7, to: 21 },
@@ -105,14 +121,15 @@ function normalizeResource(resource: ResourceInput, schema: NotionSchema): Works
   const propertyIds = resource.propertyIds?.filter((id) => schema.properties.some((property) => property.id === id))
     ?? schema.properties.map((property) => property.id);
   const databaseId = resource.databaseId ?? inferredDatabaseId(resource);
+  const dataSourceId = resource.dataSourceId ?? databaseId;
   if (resource.type === 'board') {
     const statusPropertyId = resource.statusPropertyId ?? schema.properties.find((property) => property.type === 'status')?.id;
-    return statusPropertyId ? { ...resource, databaseId, type: 'board', propertyIds, statusPropertyId } as BoardResource : null;
+    return statusPropertyId ? { ...resource, databaseId, dataSourceId, type: 'board', propertyIds, statusPropertyId } as BoardResource : null;
   }
   const datePropertyId = resource.datePropertyId ?? schema.properties.find((property) => property.type === 'date')?.id;
   if (!datePropertyId) return null;
   return {
-    ...resource, databaseId, type: 'calendar', propertyIds, datePropertyId,
+    ...resource, databaseId, dataSourceId, type: 'calendar', propertyIds, datePropertyId,
     timezone: resource.timezone ?? DEFAULT_TIMEZONE,
     defaultView: resource.defaultView ?? 'month',
     visibleHours: resource.visibleHours ?? { from: 7, to: 21 },
@@ -122,6 +139,7 @@ function normalizeResource(resource: ResourceInput, schema: NotionSchema): Works
 function writeResource(map: YMap<unknown>, resource: WorkspaceResource): void {
   map.set('type', resource.type);
   map.set('databaseId', resource.databaseId);
+  map.set('dataSourceId', resource.dataSourceId);
   map.set('title', resource.title);
   const propertyIds = map.get('propertyIds');
   const properties = propertyIds instanceof YArray ? propertyIds as YArray<string> : new YArray<string>();
@@ -137,13 +155,14 @@ function writeResource(map: YMap<unknown>, resource: WorkspaceResource): void {
   map.delete('pageIds');
 }
 
-function readStoredResource(id: string, map: YMap<unknown>, databaseId: string): WorkspaceResource | null {
+function readStoredResource(id: string, map: YMap<unknown>, databaseId: string, dataSourceId = databaseId): WorkspaceResource | null {
   const type = map.get('type');
   const storedPages = map.get('pageIds');
   const storedProperties = map.get('propertyIds');
   const base = {
     id,
     databaseId: String(map.get('databaseId') ?? databaseId),
+    dataSourceId: String(map.get('dataSourceId') ?? dataSourceId),
     title: String(map.get('title') ?? 'Sem titulo'),
     pageIds: storedPages instanceof YArray ? storedPages.toArray() as string[] : [],
     propertyIds: storedProperties instanceof YArray ? storedProperties.toArray() as string[] : [],
@@ -202,7 +221,7 @@ function readPage(id: string, map: YMap<unknown>, content: SerializedEditorState
   };
 }
 
-function roomSchema(room: DatabaseRoom): NotionSchema {
+function roomSchema(room: DataSourceRoom): NotionSchema {
   const ids = room.definitionOrder.toArray();
   const ordered = ids.map((id) => room.definitions.get(id)).filter((value): value is string => Boolean(value));
   const unordered = [...room.definitions.entries()].filter(([id]) => !ids.includes(id)).map(([, value]) => value);
@@ -214,19 +233,19 @@ function roomSchema(room: DatabaseRoom): NotionSchema {
   };
 }
 
-function roomPageIds(room: DatabaseRoom): string[] {
+function physicalPageIds(room: DataSourceRoom): string[] {
   const ids = room.pageOrder.toArray();
   return [...ids.filter((id) => room.pages.has(id)), ...[...room.pages.keys()].filter((id) => !ids.includes(id))];
 }
 
-function roomPages(room: DatabaseRoom, content: Map<string, SerializedEditorState | null>): NotionPageData[] {
-  return roomPageIds(room).flatMap((id) => {
+function roomPages(room: DataSourceRoom, pageIds: string[], content: Map<string, SerializedEditorState | null>): NotionPageData[] {
+  return pageIds.flatMap((id) => {
     const map = room.pages.get(id);
     return map ? [readPage(id, map, content.get(id) ?? null)] : [];
   });
 }
 
-function replaceDatabase(room: DatabaseRoom, state: Pick<WorkspaceState, 'schema' | 'pages'>): void {
+function replaceDataSource(room: DataSourceRoom, state: Pick<WorkspaceSeed, 'schema' | 'pages'>): void {
   room.document.transact(() => {
     room.definitions.clear();
     state.schema.properties.forEach((definition) => room.definitions.set(definition.id, JSON.stringify(definition)));
@@ -234,10 +253,10 @@ function replaceDatabase(room: DatabaseRoom, state: Pick<WorkspaceState, 'schema
     room.pages.clear();
     state.pages.forEach((page) => room.pages.set(page.id, createPageMap(page)));
     replaceArray(room.pageOrder, state.pages.map((page) => page.id));
-  }, 'database-replace');
+  }, 'data-source-replace');
 }
 
-/** Coordinates workspace references, independent database documents, view documents and page content documents. */
+/** Coordinates containers, data sources, ownership, views and independent page content documents. */
 export class WorkspaceYjsStore {
   private readonly workspaceDocument = new Doc();
   private readonly workspaceProvider: RoomProvider;
@@ -245,7 +264,12 @@ export class WorkspaceYjsStore {
   private readonly resourceOrder = this.workspaceDocument.getArray<string>('resource-order');
   private readonly databaseReferences = this.workspaceDocument.getMap<string>('database-references');
   private readonly databaseOrder = this.workspaceDocument.getArray<string>('database-order');
-  private readonly databaseRooms = new Map<string, DatabaseRoom>();
+  private readonly dataSourceReferences = this.workspaceDocument.getMap<string>('data-source-references');
+  private readonly dataSourceOrder = this.workspaceDocument.getArray<string>('data-source-order');
+  private readonly pageOwnership = this.workspaceDocument.getMap<string>('page-ownership');
+  private readonly migrations = this.workspaceDocument.getMap<string>('migrations');
+  private readonly databaseRooms = new Map<string, DatabaseContainerRoom>();
+  private readonly dataSourceRooms = new Map<string, DataSourceRoom>();
   private readonly resourceRooms = new Map<string, ResourceRoom>();
   private readonly initialContent = new Map<string, SerializedEditorState | null>();
   private readonly listeners = new Set<(state: WorkspaceState) => void>();
@@ -266,35 +290,37 @@ export class WorkspaceYjsStore {
     this.listeners.forEach((listener) => listener(state));
   };
 
-  initialize(seed: WorkspaceState): void {
+  initialize(seed: WorkspaceSeed): void {
     seed.pages.forEach((page) => this.initialContent.set(page.id, page.content));
     if (!this.references.size) this.initializeFresh(seed);
     else if (!this.databaseReferences.size || this.readReferences().some((reference) => !reference.databaseId)) this.migrateLegacy(seed);
+    else if (!this.dataSourceReferences.size || !this.migrations.has('database-v2-to-datasource-v1')) this.migrateVersionedDataSources(seed);
     else {
       this.syncRooms(seed);
       this.publish();
     }
   }
 
-  private initializeFresh(seed: WorkspaceState): void {
+  private initializeFresh(seed: WorkspaceSeed): void {
     const migrated = seed.resources?.map((resource) => normalizeResource(resource, seed.schema))
       .filter((resource): resource is WorkspaceResource => Boolean(resource)) ?? [];
     const resources = migrated.length ? migrated : defaultResources(seed.schema, seed.pages);
-    this.seedDatabases(resources, seed);
+    this.seedDataSources(resources, seed);
     resources.forEach((resource) => this.ensureResourceRoom(resource));
     this.workspaceDocument.transact(() => {
       resources.forEach((resource) => this.references.set(resource.id, JSON.stringify({
-        id: resource.id, type: resource.type, databaseId: resource.databaseId,
+        id: resource.id, type: resource.type, databaseId: resource.databaseId, dataSourceId: resource.dataSourceId,
       })));
       replaceArray(this.resourceOrder, resources.map((resource) => resource.id));
+      this.migrations.set('database-v2-to-datasource-v1', new Date().toISOString());
     }, 'workspace-seed');
     this.publish();
   }
 
-  private migrateLegacy(seed: WorkspaceState): void {
+  private migrateLegacy(seed: WorkspaceSeed): void {
     const legacyDocument = new Doc();
     const legacyProvider = this.createProvider(ROOM_NAMES.legacyDatabase, legacyDocument);
-    const legacyRoom: DatabaseRoom = {
+    const legacyRoom: DataSourceRoom = {
       id: 'legacy',
       document: legacyDocument,
       provider: legacyProvider,
@@ -305,7 +331,7 @@ export class WorkspaceYjsStore {
       onTransaction: () => undefined,
     };
     const legacyState = legacyRoom.definitions.size || legacyRoom.pages.size
-      ? { schema: roomSchema(legacyRoom), pages: roomPages(legacyRoom, this.initialContent) }
+      ? { schema: roomSchema(legacyRoom), pages: roomPages(legacyRoom, physicalPageIds(legacyRoom), this.initialContent) }
       : { schema: seed.schema, pages: seed.pages };
     const seedResources = seed.resources?.map((resource) => normalizeResource(resource, legacyState.schema))
       .filter((resource): resource is WorkspaceResource => Boolean(resource)) ?? [];
@@ -318,16 +344,19 @@ export class WorkspaceYjsStore {
         ...seedFallback,
         id: reference.id,
         databaseId: reference.databaseId || inferredDatabaseId(reference),
+        dataSourceId: reference.dataSourceId || reference.databaseId || inferredDatabaseId(reference),
       } as WorkspaceResource;
       const room = this.ensureResourceRoom(fallback);
-      const stored = readStoredResource(reference.id, room.resource, reference.databaseId || inferredDatabaseId(reference));
-      return stored ? [{ ...stored, databaseId: reference.databaseId || inferredDatabaseId(reference) } as WorkspaceResource] : [];
+      const databaseId = reference.databaseId || inferredDatabaseId(reference);
+      const dataSourceId = reference.dataSourceId || databaseId;
+      const stored = readStoredResource(reference.id, room.resource, databaseId, dataSourceId);
+      return stored ? [{ ...stored, databaseId, dataSourceId } as WorkspaceResource] : [];
     });
 
-    this.seedDatabases(resources, legacyState);
+    this.seedDataSources(resources, legacyState);
     const referencedPages = new Set(resources.flatMap((resource) => resource.pageIds));
     const standalonePages = legacyState.pages.filter((page) => !referencedPages.has(page.id));
-    if (standalonePages.length) this.ensureDatabaseRoom('standalone', { schema: { properties: [] }, pages: standalonePages }, 'Paginas independentes');
+    if (standalonePages.length) this.ensureDataSourceRoom('standalone', { schema: { properties: [] }, pages: standalonePages }, 'standalone', 'Paginas independentes');
 
     resources.forEach((resource) => {
       const room = this.resourceRooms.get(resource.id);
@@ -335,42 +364,96 @@ export class WorkspaceYjsStore {
     });
     this.workspaceDocument.transact(() => {
       resources.forEach((resource) => this.references.set(resource.id, JSON.stringify({
-        id: resource.id, type: resource.type, databaseId: resource.databaseId,
+        id: resource.id, type: resource.type, databaseId: resource.databaseId, dataSourceId: resource.dataSourceId,
       })));
       replaceArray(this.resourceOrder, resources.map((resource) => resource.id));
     }, 'workspace-v2-migration');
     legacyProvider.destroy();
     legacyDocument.destroy();
+    this.migrations.set('legacy-to-datasource-v1', new Date().toISOString());
+    this.migrations.set('database-v2-to-datasource-v1', new Date().toISOString());
     this.publish();
   }
 
-  private seedDatabases(resources: WorkspaceResource[], state: Pick<WorkspaceState, 'schema' | 'pages'>): void {
+  private migrateVersionedDataSources(seed: WorkspaceSeed): void {
+    const seedResources = seed.resources?.map((resource) => normalizeResource(resource, seed.schema))
+      .filter((resource): resource is WorkspaceResource => Boolean(resource)) ?? [];
+    const references = this.readDatabaseReferences();
+
+    references.forEach((reference) => {
+      const legacyDocument = new Doc();
+      const legacyProvider = this.createProvider(ROOM_NAMES.legacyDataSource(reference.id), legacyDocument);
+      const legacyRoom: DataSourceRoom = {
+        id: reference.id,
+        document: legacyDocument,
+        provider: legacyProvider,
+        definitions: legacyDocument.getMap<string>('schema-definitions'),
+        definitionOrder: legacyDocument.getArray<string>('schema-order'),
+        pages: legacyDocument.getMap<YMap<unknown>>('pages'),
+        pageOrder: legacyDocument.getArray<string>('page-order'),
+        onTransaction: () => undefined,
+      };
+      const relatedViews = seedResources.filter((resource) => resource.dataSourceId === reference.id || resource.databaseId === reference.id);
+      const relatedPageIds = new Set(relatedViews.flatMap((resource) => resource.pageIds));
+      const relatedPropertyIds = new Set(relatedViews.flatMap((resource) => resource.propertyIds));
+      const fallback = {
+        schema: {
+          properties: seed.schema.properties.filter((property) => !relatedPropertyIds.size || relatedPropertyIds.has(property.id)),
+        },
+        pages: seed.pages.filter((item) => !relatedPageIds.size || relatedPageIds.has(item.id)),
+      };
+      const source = legacyRoom.definitions.size || legacyRoom.pages.size
+        ? { schema: roomSchema(legacyRoom), pages: roomPages(legacyRoom, physicalPageIds(legacyRoom), this.initialContent) }
+        : fallback;
+      this.ensureDataSourceRoom(reference.id, source, reference.id, reference.title);
+      legacyProvider.destroy();
+      legacyDocument.destroy();
+    });
+
+    this.workspaceDocument.transact(() => {
+      this.readReferences().forEach((reference) => {
+        const dataSourceId = reference.dataSourceId || reference.databaseId;
+        this.references.set(reference.id, JSON.stringify({ ...reference, dataSourceId }));
+        const container = this.databaseRooms.get(reference.databaseId);
+        if (container && !container.viewIds.toArray().includes(reference.id)) container.viewIds.push([reference.id]);
+        const view = this.resourceRooms.get(reference.id);
+        if (view && !view.resource.has('dataSourceId')) view.resource.set('dataSourceId', dataSourceId);
+      });
+      this.migrations.set('database-v2-to-datasource-v1', new Date().toISOString());
+    }, 'database-v2-to-datasource-v1');
+    this.syncRooms(seed);
+    this.publish();
+  }
+
+  private seedDataSources(resources: WorkspaceResource[], state: Pick<WorkspaceSeed, 'schema' | 'pages'>): void {
     const groups = new Map<string, WorkspaceResource[]>();
-    resources.forEach((resource) => groups.set(resource.databaseId, [...(groups.get(resource.databaseId) ?? []), resource]));
-    groups.forEach((views, databaseId) => {
+    resources.forEach((resource) => groups.set(resource.dataSourceId, [...(groups.get(resource.dataSourceId) ?? []), resource]));
+    groups.forEach((views, dataSourceId) => {
       const pageIds = new Set(views.flatMap((view) => view.pageIds));
       const propertyIds = new Set(views.flatMap((view) => view.propertyIds));
       const pages = state.pages.filter((page) => pageIds.has(page.id));
       const properties = state.schema.properties.filter((property) => propertyIds.has(property.id));
-      this.ensureDatabaseRoom(databaseId, { schema: { properties }, pages }, views[0]?.title ?? databaseId);
+      const owner = views[0];
+      this.ensureDataSourceRoom(dataSourceId, { schema: { properties }, pages }, owner?.databaseId ?? dataSourceId, owner?.title ?? dataSourceId);
     });
     const referencedPages = new Set(resources.flatMap((resource) => resource.pageIds));
     const standalone = state.pages.filter((page) => !referencedPages.has(page.id));
-    if (standalone.length) this.ensureDatabaseRoom('standalone', { schema: { properties: [] }, pages: standalone }, 'Paginas independentes');
+    if (standalone.length) this.ensureDataSourceRoom('standalone', { schema: { properties: [] }, pages: standalone }, 'standalone', 'Paginas independentes');
   }
 
   private fallbackResource(reference: ResourceReference, schema: NotionSchema): WorkspaceResource {
     const databaseId = reference.databaseId || inferredDatabaseId(reference);
+    const dataSourceId = reference.dataSourceId || databaseId;
     if (reference.type === 'board') {
       const status = schema.properties.find((property) => property.type === 'status');
       return {
-        id: reference.id, databaseId, type: 'board', title: 'Board', pageIds: [],
+        id: reference.id, databaseId, dataSourceId, type: 'board', title: 'Board', pageIds: [],
         propertyIds: status ? [status.id] : [], statusPropertyId: status?.id ?? 'status',
       };
     }
     const date = schema.properties.find((property) => property.type === 'date');
     return {
-      id: reference.id, databaseId, type: 'calendar', title: 'Calendario', pageIds: [],
+      id: reference.id, databaseId, dataSourceId, type: 'calendar', title: 'Calendario', pageIds: [],
       propertyIds: date ? [date.id] : [], datePropertyId: date?.id ?? 'date',
       timezone: DEFAULT_TIMEZONE, defaultView: 'month', visibleHours: { from: 7, to: 21 },
     };
@@ -389,54 +472,90 @@ export class WorkspaceYjsStore {
     return [...ordered, ...unordered].flatMap((value) => {
       const parsed = safeJson<Partial<ResourceReference>>(value);
       if (!parsed?.id || !parsed.type) return [];
-      return [{ id: parsed.id, type: parsed.type, databaseId: parsed.databaseId ?? '' }];
+      const databaseId = parsed.databaseId ?? '';
+      return [{ id: parsed.id, type: parsed.type, databaseId, dataSourceId: parsed.dataSourceId ?? databaseId }];
     });
   }
 
-  private readDatabaseReferences(): DatabaseReference[] {
+  private readDatabaseReferences(): Array<Pick<DatabaseContainer, 'id' | 'title'>> {
     const ids = this.databaseOrder.toArray();
     const ordered = ids.map((id) => this.databaseReferences.get(id)).filter((value): value is string => Boolean(value));
     const unordered = [...this.databaseReferences.entries()].filter(([id]) => !ids.includes(id)).map(([, value]) => value);
     return [...ordered, ...unordered].flatMap((value) => {
-      const parsed = safeJson<DatabaseReference>(value);
+      const parsed = safeJson<Pick<DatabaseContainer, 'id' | 'title'>>(value);
       return parsed?.id ? [parsed] : [];
     });
   }
 
+  private readDataSourceReferences(): DataSourceReference[] {
+    const ids = this.dataSourceOrder.toArray();
+    const ordered = ids.map((id) => this.dataSourceReferences.get(id)).filter((value): value is string => Boolean(value));
+    const unordered = [...this.dataSourceReferences.entries()].filter(([id]) => !ids.includes(id)).map(([, value]) => value);
+    return [...ordered, ...unordered].flatMap((value) => {
+      const parsed = safeJson<DataSourceReference>(value);
+      return parsed?.id && parsed.databaseId ? [parsed] : [];
+    });
+  }
+
+  private readOwnership(pageId: string): PageOwnership | null {
+    return safeJson<PageOwnership>(this.pageOwnership.get(pageId));
+  }
+
+  private ownedPageIds(room: DataSourceRoom): string[] {
+    return physicalPageIds(room).filter((pageId) => this.readOwnership(pageId)?.dataSourceId === room.id);
+  }
+
+  private setOwnership(pageId: string, dataSourceId: string): void {
+    const current = this.readOwnership(pageId);
+    if (current?.dataSourceId === dataSourceId) return;
+    this.pageOwnership.set(pageId, JSON.stringify({
+      pageId,
+      dataSourceId,
+      version: (current?.version ?? 0) + 1,
+    } satisfies PageOwnership));
+  }
+
   read(): WorkspaceState {
-    const rooms = [...this.databaseRooms.values()];
-    const schemas = rooms.map(roomSchema);
-    const pages = rooms.flatMap((room) => roomPages(room, this.initialContent));
+    const rooms = [...this.dataSourceRooms.values()];
+    const pages = rooms.flatMap((room) => roomPages(room, this.ownedPageIds(room), this.initialContent));
     const pageSchemas = Object.fromEntries(rooms.flatMap((room) => {
-      const databaseSchema = roomSchema(room);
-      return roomPageIds(room).map((pageId) => [pageId, databaseSchema]);
+      const dataSourceSchema = roomSchema(room);
+      return this.ownedPageIds(room).map((pageId) => [pageId, dataSourceSchema]);
     }));
-    const propertyIds = new Set<string>();
-    const schema: NotionSchema = {
-      properties: schemas.flatMap((item) => item.properties).filter((property) => {
-        if (propertyIds.has(property.id)) return false;
-        propertyIds.add(property.id);
-        return true;
-      }),
+    const dataSourceSchemas = Object.fromEntries(rooms.map((room) => [room.id, roomSchema(room)]));
+    const ownership = Object.fromEntries([...this.pageOwnership.entries()].flatMap(([pageId, value]) => {
+      const parsed = safeJson<PageOwnership>(value);
+      return parsed ? [[pageId, parsed]] : [];
+    }));
+    const databases = this.readDatabaseReferences().map((reference) => {
+      const room = this.databaseRooms.get(reference.id);
+      return {
+        ...reference,
+        dataSourceIds: room?.dataSourceIds.toArray() ?? [],
+        viewIds: room?.viewIds.toArray() ?? [],
+      };
+    });
+    return {
+      pages, resources: this.readResources(), pageSchemas, dataSourceSchemas,
+      databases, dataSources: this.readDataSourceReferences(), ownership,
     };
-    return { schema, pages, resources: this.readResources(), pageSchemas };
   }
 
   private readResources(): WorkspaceResource[] {
     return this.readReferences().flatMap((reference) => {
       const viewRoom = this.resourceRooms.get(reference.id);
-      const databaseRoom = this.databaseRooms.get(reference.databaseId);
-      if (!viewRoom || !databaseRoom) return [];
-      const stored = readStoredResource(reference.id, viewRoom.resource, reference.databaseId);
+      const dataSourceRoom = this.dataSourceRooms.get(reference.dataSourceId);
+      if (!viewRoom || !dataSourceRoom) return [];
+      const stored = readStoredResource(reference.id, viewRoom.resource, reference.databaseId, reference.dataSourceId);
       if (!stored) return [];
-      const pageIds = this.orderedPageIds(databaseRoom, reference.id);
-      const propertyIds = stored.propertyIds.length ? stored.propertyIds : roomSchema(databaseRoom).properties.map((property) => property.id);
-      return [{ ...stored, databaseId: reference.databaseId, pageIds, propertyIds } as WorkspaceResource];
+      const pageIds = this.orderedPageIds(dataSourceRoom, reference.id);
+      const propertyIds = stored.propertyIds.length ? stored.propertyIds : roomSchema(dataSourceRoom).properties.map((property) => property.id);
+      return [{ ...stored, databaseId: reference.databaseId, dataSourceId: reference.dataSourceId, pageIds, propertyIds } as WorkspaceResource];
     });
   }
 
-  private orderedPageIds(room: DatabaseRoom, viewId: string): string[] {
-    const ids = roomPageIds(room);
+  private orderedPageIds(room: DataSourceRoom, viewId: string): string[] {
+    const ids = this.ownedPageIds(room);
     const baseIndex = new Map(ids.map((id, index) => [id, index * 1024]));
     return [...ids].sort((left, right) => {
       const leftRanks = room.pages.get(left)?.get('viewRanks');
@@ -449,12 +568,51 @@ export class WorkspaceYjsStore {
     });
   }
 
-  private ensureDatabaseRoom(id: string, seed?: Pick<WorkspaceState, 'schema' | 'pages'>, title = id): DatabaseRoom {
+  private ensureDatabaseRoom(id: string, title = id, dataSourceId?: string, viewId?: string): DatabaseContainerRoom {
     const existing = this.databaseRooms.get(id);
-    if (existing) return existing;
+    if (existing) {
+      existing.document.transact(() => {
+        if (dataSourceId && !existing.dataSourceIds.toArray().includes(dataSourceId)) existing.dataSourceIds.push([dataSourceId]);
+        if (viewId && !existing.viewIds.toArray().includes(viewId)) existing.viewIds.push([viewId]);
+      }, 'database-reference-update');
+      return existing;
+    }
     const document = new Doc();
     const provider = this.createProvider(ROOM_NAMES.database(id), document);
-    const room: DatabaseRoom = {
+    const room: DatabaseContainerRoom = {
+      id,
+      document,
+      provider,
+      metadata: document.getMap<unknown>('database'),
+      dataSourceIds: document.getArray<string>('data-source-ids'),
+      viewIds: document.getArray<string>('view-ids'),
+      onTransaction: () => this.publish(),
+    };
+    this.databaseRooms.set(id, room);
+    document.transact(() => {
+      if (!room.metadata.has('title')) room.metadata.set('title', title);
+      if (dataSourceId && !room.dataSourceIds.toArray().includes(dataSourceId)) room.dataSourceIds.push([dataSourceId]);
+      if (viewId && !room.viewIds.toArray().includes(viewId)) room.viewIds.push([viewId]);
+    }, 'database-seed');
+    document.on('afterTransaction', room.onTransaction);
+    if (!this.databaseReferences.has(id)) this.workspaceDocument.transact(() => {
+      this.databaseReferences.set(id, JSON.stringify({ id, title }));
+      this.databaseOrder.push([id]);
+    }, 'database-reference-create');
+    return room;
+  }
+
+  private ensureDataSourceRoom(
+    id: string,
+    seed?: Pick<WorkspaceSeed, 'schema' | 'pages'>,
+    databaseId = id,
+    title = id,
+  ): DataSourceRoom {
+    const existing = this.dataSourceRooms.get(id);
+    if (existing) return existing;
+    const document = new Doc();
+    const provider = this.createProvider(ROOM_NAMES.dataSource(id), document);
+    const room: DataSourceRoom = {
       id,
       document,
       provider,
@@ -464,23 +622,35 @@ export class WorkspaceYjsStore {
       pageOrder: document.getArray<string>('page-order'),
       onTransaction: () => this.publish(),
     };
-    this.databaseRooms.set(id, room);
-    if (seed && !room.definitions.size && !room.pages.size) replaceDatabase(room, seed);
+    this.dataSourceRooms.set(id, room);
+    if (seed && !room.definitions.size && !room.pages.size) replaceDataSource(room, seed);
     document.on('afterTransaction', room.onTransaction);
-    if (!this.databaseReferences.has(id)) this.workspaceDocument.transact(() => {
-      this.databaseReferences.set(id, JSON.stringify({ id, title }));
-      this.databaseOrder.push([id]);
-    }, 'database-reference-create');
+    this.ensureDatabaseRoom(databaseId, title, id);
+    this.workspaceDocument.transact(() => {
+      if (!this.dataSourceReferences.has(id)) {
+        this.dataSourceReferences.set(id, JSON.stringify({ id, databaseId, title } satisfies DataSourceReference));
+        this.dataSourceOrder.push([id]);
+      }
+      physicalPageIds(room).forEach((pageId) => {
+        if (!this.readOwnership(pageId)) this.setOwnership(pageId, id);
+      });
+    }, 'data-source-reference-create');
     return room;
   }
 
   private ensureResourceRoom(resource: WorkspaceResource): ResourceRoom {
     const existing = this.resourceRooms.get(resource.id);
-    if (existing) return existing;
+    if (existing) {
+      if (!existing.resource.has('dataSourceId')) {
+        existing.document.transact(() => existing.resource.set('dataSourceId', resource.dataSourceId), 'view-data-source-migration');
+      }
+      return existing;
+    }
     const document = new Doc();
     const provider = this.createProvider(ROOM_NAMES.view(resource.id), document);
     const map = document.getMap<unknown>('resource');
     if (!map.has('type')) document.transact(() => writeResource(map, resource), 'view-seed');
+    else if (!map.has('dataSourceId')) document.transact(() => map.set('dataSourceId', resource.dataSourceId), 'view-data-source-migration');
     const onTransaction = () => this.publish();
     document.on('afterTransaction', onTransaction);
     const room = { document, provider, resource: map, onTransaction };
@@ -488,11 +658,17 @@ export class WorkspaceYjsStore {
     return room;
   }
 
-  private syncRooms(seed?: WorkspaceState): void {
-    this.readDatabaseReferences().forEach((reference) => this.ensureDatabaseRoom(reference.id, undefined, reference.title));
-    const schema = seed?.schema ?? this.read().schema;
+  private syncRooms(seed?: WorkspaceSeed): void {
+    this.readDatabaseReferences().forEach((reference) => this.ensureDatabaseRoom(reference.id, reference.title));
+    this.readDataSourceReferences().forEach((reference) => this.ensureDataSourceRoom(
+      reference.id, undefined, reference.databaseId, reference.title,
+    ));
+    const schema = seed?.schema ?? {
+      properties: [...this.dataSourceRooms.values()].flatMap((room) => roomSchema(room).properties),
+    };
     this.readReferences().forEach((reference) => {
-      if (reference.databaseId) this.ensureDatabaseRoom(reference.databaseId);
+      if (reference.databaseId) this.ensureDatabaseRoom(reference.databaseId, reference.databaseId, reference.dataSourceId, reference.id);
+      if (reference.dataSourceId) this.ensureDataSourceRoom(reference.dataSourceId, undefined, reference.databaseId);
       const fallback = seed?.resources?.find((resource) => resource.id === reference.id);
       const normalized = fallback ? normalizeResource(fallback, schema) : null;
       this.ensureResourceRoom(normalized ?? this.fallbackResource(reference, schema));
@@ -501,22 +677,27 @@ export class WorkspaceYjsStore {
     [...this.resourceRooms.keys()].forEach((id) => { if (!activeViews.has(id)) this.disposeResourceRoom(id); });
   }
 
-  replaceAll(state: WorkspaceState): void {
+  replaceAll(state: WorkspaceSeed): void {
     this.initialContent.clear();
     state.pages.forEach((page) => this.initialContent.set(page.id, page.content));
     [...this.resourceRooms.keys()].forEach((id) => this.disposeResourceRoom(id));
     [...this.databaseRooms.keys()].forEach((id) => this.disposeDatabaseRoom(id));
+    [...this.dataSourceRooms.keys()].forEach((id) => this.disposeDataSourceRoom(id));
     this.workspaceDocument.transact(() => {
       this.references.clear();
       this.resourceOrder.delete(0, this.resourceOrder.length);
       this.databaseReferences.clear();
       this.databaseOrder.delete(0, this.databaseOrder.length);
+      this.dataSourceReferences.clear();
+      this.dataSourceOrder.delete(0, this.dataSourceOrder.length);
+      this.pageOwnership.clear();
+      this.migrations.clear();
     }, 'workspace-reset');
     this.initializeFresh({ schema: state.schema, pages: state.pages });
   }
 
-  applySchema(databaseId: string, schema: NotionSchema, fallbackByPropertyId: Record<string, StoredPropertyValue> = {}): void {
-    const room = this.databaseRooms.get(databaseId);
+  applySchema(dataSourceId: string, schema: NotionSchema, fallbackByPropertyId: Record<string, StoredPropertyValue> = {}): void {
+    const room = this.dataSourceRooms.get(dataSourceId);
     if (!room) return;
     const previous = new Map<string, PropertyDefinition>();
     room.definitions.forEach((value, id) => {
@@ -531,15 +712,31 @@ export class WorkspaceYjsStore {
       room.pages.forEach((page) => {
         const properties = page.get('properties');
         if (!(properties instanceof YMap)) return;
-        [...properties.keys()].forEach((id) => { if (!nextIds.has(id)) properties.delete(id); });
-        schema.properties.forEach((definition) => properties.set(definition.id, convertPropertyValue(
-          definition, previous.get(definition.id), properties.get(definition.id), fallbackByPropertyId[definition.id],
-        )));
+        const storedArchive = page.get('archivedProperties');
+        const archived = storedArchive instanceof YMap
+          ? storedArchive as YMap<StoredPropertyValue>
+          : new YMap<StoredPropertyValue>();
+        if (!(storedArchive instanceof YMap)) page.set('archivedProperties', archived);
+        [...properties.keys()].forEach((id) => {
+          if (nextIds.has(id)) return;
+          archived.set(id, properties.get(id));
+          properties.delete(id);
+        });
+        schema.properties.forEach((definition) => {
+          const restored = !previous.has(definition.id) && archived.has(definition.id)
+            ? archived.get(definition.id)
+            : properties.get(definition.id);
+          const nextValue = previous.has(definition.id)
+            ? convertPropertyValue(definition, previous.get(definition.id), restored, fallbackByPropertyId[definition.id])
+            : restored ?? fallbackByPropertyId[definition.id] ?? emptyValueFor(definition);
+          properties.set(definition.id, nextValue);
+          archived.delete(definition.id);
+        });
       });
     }, 'schema-change');
     this.resourceRooms.forEach((view, viewId) => {
       const reference = this.readReferences().find((item) => item.id === viewId);
-      if (reference?.databaseId !== databaseId) return;
+      if (reference?.dataSourceId !== dataSourceId) return;
       const propertyIds = view.resource.get('propertyIds');
       if (propertyIds instanceof YArray) view.document.transact(() => {
         replaceArray(propertyIds, propertyIds.toArray().filter((id) => schema.properties.some((property) => property.id === id)) as string[]);
@@ -557,16 +754,18 @@ export class WorkspaceYjsStore {
     }
 
     const databaseId = 'page-properties-' + pageId;
+    const dataSourceId = databaseId;
     const page = readPage(pageId, sourceMap, this.initialContent.get(pageId) ?? null);
     page.properties = Object.fromEntries(schema.properties.map((definition) => [
       definition.id,
       page.properties[definition.id] ?? fallbackByPropertyId[definition.id] ?? emptyValueFor(definition),
     ]));
-    const target = this.ensureDatabaseRoom(databaseId, { schema, pages: [] }, page.title || 'Propriedades da pagina');
+    const target = this.ensureDataSourceRoom(dataSourceId, { schema, pages: [] }, databaseId, page.title || 'Propriedades da pagina');
     target.document.transact(() => {
       target.pages.set(pageId, createPageMap(page));
       if (!target.pageOrder.toArray().includes(pageId)) target.pageOrder.push([pageId]);
     }, 'page-properties-create');
+    this.workspaceDocument.transact(() => this.setOwnership(pageId, dataSourceId), 'page-properties-ownership-commit');
     source.document.transact(() => {
       source.pages.delete(pageId);
       const index = source.pageOrder.toArray().indexOf(pageId);
@@ -574,31 +773,45 @@ export class WorkspaceYjsStore {
     }, 'page-properties-detach-standalone');
   }
 
-  insertPage(page: NotionPageData, afterPageId?: string, databaseId = 'standalone'): void {
+  insertPage(page: NotionPageData, afterPageId?: string, dataSourceId = 'standalone'): void {
     this.initialContent.set(page.id, page.content);
-    const room = this.ensureDatabaseRoom(databaseId, { schema: { properties: [] }, pages: [] }, databaseId === 'standalone' ? 'Paginas independentes' : databaseId);
+    const reference = this.readDataSourceReferences().find((item) => item.id === dataSourceId);
+    const databaseId = reference?.databaseId ?? dataSourceId;
+    const room = this.ensureDataSourceRoom(
+      dataSourceId,
+      { schema: { properties: [] }, pages: [] },
+      databaseId,
+      dataSourceId === 'standalone' ? 'Paginas independentes' : dataSourceId,
+    );
     room.document.transact(() => {
       room.pages.set(page.id, createPageMap(page));
       const ids = room.pageOrder.toArray();
       const afterIndex = afterPageId ? ids.indexOf(afterPageId) : -1;
       room.pageOrder.insert(afterIndex >= 0 ? afterIndex + 1 : ids.length, [page.id]);
     }, 'page-create');
+    this.workspaceDocument.transact(() => this.setOwnership(page.id, dataSourceId), 'page-create-ownership');
   }
 
   createResource(resource: WorkspaceResource, definitions: PropertyDefinition[] = []): void {
-    const database = this.ensureDatabaseRoom(resource.databaseId, { schema: { properties: definitions }, pages: [] }, resource.title);
-    if (definitions.length && database.definitions.size) database.document.transact(() => {
+    const dataSource = this.ensureDataSourceRoom(
+      resource.dataSourceId,
+      { schema: { properties: definitions }, pages: [] },
+      resource.databaseId,
+      resource.title,
+    );
+    this.ensureDatabaseRoom(resource.databaseId, resource.title, resource.dataSourceId, resource.id);
+    if (definitions.length && dataSource.definitions.size) dataSource.document.transact(() => {
       definitions.forEach((definition) => {
-        if (!database.definitions.has(definition.id)) {
-          database.definitions.set(definition.id, JSON.stringify(definition));
-          database.definitionOrder.push([definition.id]);
+        if (!dataSource.definitions.has(definition.id)) {
+          dataSource.definitions.set(definition.id, JSON.stringify(definition));
+          dataSource.definitionOrder.push([definition.id]);
         }
       });
     }, 'resource-schema-create');
     this.ensureResourceRoom(resource);
     this.workspaceDocument.transact(() => {
       this.references.set(resource.id, JSON.stringify({
-        id: resource.id, type: resource.type, databaseId: resource.databaseId,
+        id: resource.id, type: resource.type, databaseId: resource.databaseId, dataSourceId: resource.dataSourceId,
       }));
       if (!this.resourceOrder.toArray().includes(resource.id)) this.resourceOrder.push([resource.id]);
     }, 'resource-create');
@@ -608,7 +821,7 @@ export class WorkspaceYjsStore {
     const resource = this.readResources().find((item) => item.id === resourceId);
     if (!resource || resource.pageIds.includes(pageId)) return;
     const source = this.findPageRoom(pageId);
-    const target = this.databaseRooms.get(resource.databaseId);
+    const target = this.dataSourceRooms.get(resource.dataSourceId);
     const sourceMap = source?.pages.get(pageId);
     if (!source || !target || !sourceMap) return;
     const sourcePage = readPage(pageId, sourceMap, this.initialContent.get(pageId) ?? null);
@@ -620,6 +833,7 @@ export class WorkspaceYjsStore {
       target.pages.set(pageId, createPageMap(sourcePage));
       if (!target.pageOrder.toArray().includes(pageId)) target.pageOrder.push([pageId]);
     }, 'page-move-target');
+    this.workspaceDocument.transact(() => this.setOwnership(pageId, target.id), 'page-move-ownership-commit');
     source.document.transact(() => {
       source.pages.delete(pageId);
       const index = source.pageOrder.toArray().indexOf(pageId);
@@ -630,16 +844,18 @@ export class WorkspaceYjsStore {
   unlinkPage(resourceId: string, pageId: string): void {
     const resource = this.readResources().find((item) => item.id === resourceId);
     if (!resource?.pageIds.includes(pageId)) return;
-    const source = this.databaseRooms.get(resource.databaseId);
+    const source = this.dataSourceRooms.get(resource.dataSourceId);
     const sourceMap = source?.pages.get(pageId);
     if (!source || !sourceMap) return;
     const page = readPage(pageId, sourceMap, this.initialContent.get(pageId) ?? null);
     const databaseId = 'page-properties-' + pageId;
-    const target = this.ensureDatabaseRoom(databaseId, { schema: roomSchema(source), pages: [] }, page.title || 'Propriedades da pagina');
+    const dataSourceId = databaseId;
+    const target = this.ensureDataSourceRoom(dataSourceId, { schema: roomSchema(source), pages: [] }, databaseId, page.title || 'Propriedades da pagina');
     target.document.transact(() => {
       target.pages.set(pageId, createPageMap(page));
       if (!target.pageOrder.toArray().includes(pageId)) target.pageOrder.push([pageId]);
     }, 'page-unlink-target');
+    this.workspaceDocument.transact(() => this.setOwnership(pageId, dataSourceId), 'page-unlink-ownership-commit');
     source.document.transact(() => {
       source.pages.delete(pageId);
       const index = source.pageOrder.toArray().indexOf(pageId);
@@ -670,14 +886,14 @@ export class WorkspaceYjsStore {
 
   reorderResourcePage(resourceId: string, pageId: string, overPageId: string): void {
     const reference = this.readReferences().find((item) => item.id === resourceId);
-    const room = reference ? this.databaseRooms.get(reference.databaseId) : null;
+    const room = reference ? this.dataSourceRooms.get(reference.dataSourceId) : null;
     if (!room) return;
     room.document.transact(() => this.writePageRank(room, resourceId, pageId, overPageId), 'resource-reorder-page');
   }
 
   moveBoardPage(resourceId: string, pageId: string, propertyId: string, statusId: StoredPropertyValue, beforePageId?: string): void {
     const reference = this.readReferences().find((item) => item.id === resourceId);
-    const room = reference ? this.databaseRooms.get(reference.databaseId) : null;
+    const room = reference ? this.dataSourceRooms.get(reference.dataSourceId) : null;
     const page = room?.pages.get(pageId);
     const properties = page?.get('properties');
     if (!room || !(page instanceof YMap) || !(properties instanceof YMap)) return;
@@ -688,7 +904,7 @@ export class WorkspaceYjsStore {
     }, 'board-card-move');
   }
 
-  private writePageRank(room: DatabaseRoom, viewId: string, pageId: string, beforePageId: string): void {
+  private writePageRank(room: DataSourceRoom, viewId: string, pageId: string, beforePageId: string): void {
     const ids = this.orderedPageIds(room, viewId).filter((id) => id !== pageId);
     const target = ids.indexOf(beforePageId);
     if (target < 0) return;
@@ -723,6 +939,7 @@ export class WorkspaceYjsStore {
       const index = room.pageOrder.toArray().indexOf(pageId);
       if (index >= 0) room.pageOrder.delete(index, 1);
     }, 'page-delete');
+    this.workspaceDocument.transact(() => this.pageOwnership.delete(pageId), 'page-delete-ownership');
   }
 
   updatePage(id: string, patch: Partial<NotionPageData>): void {
@@ -771,8 +988,11 @@ export class WorkspaceYjsStore {
     }, 'property-change');
   }
 
-  private findPageRoom(pageId: string): DatabaseRoom | undefined {
-    return [...this.databaseRooms.values()].find((room) => room.pages.has(pageId));
+  private findPageRoom(pageId: string): DataSourceRoom | undefined {
+    const ownership = this.readOwnership(pageId);
+    if (!ownership) return undefined;
+    const room = this.dataSourceRooms.get(ownership.dataSourceId);
+    return room?.pages.has(pageId) ? room : undefined;
   }
 
   private disposeResourceRoom(id: string): void {
@@ -793,10 +1013,20 @@ export class WorkspaceYjsStore {
     this.databaseRooms.delete(id);
   }
 
+  private disposeDataSourceRoom(id: string): void {
+    const room = this.dataSourceRooms.get(id);
+    if (!room) return;
+    room.document.off('afterTransaction', room.onTransaction);
+    room.provider.destroy();
+    room.document.destroy();
+    this.dataSourceRooms.delete(id);
+  }
+
   destroy(): void {
     this.contentTimers.forEach((timer) => clearTimeout(timer));
     [...this.resourceRooms.keys()].forEach((id) => this.disposeResourceRoom(id));
     [...this.databaseRooms.keys()].forEach((id) => this.disposeDatabaseRoom(id));
+    [...this.dataSourceRooms.keys()].forEach((id) => this.disposeDataSourceRoom(id));
     this.workspaceDocument.off('afterTransaction', this.handleWorkspaceTransaction);
     this.workspaceProvider.destroy();
     this.workspaceDocument.destroy();

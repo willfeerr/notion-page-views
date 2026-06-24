@@ -68,10 +68,10 @@ function loadCollabUser() {
 
 export default function App() {
   const [initial] = useState(loadState);
-  const [schema, setSchema] = useState(initial.schema);
   const [pages, setPages] = useState(initial.pages);
   const [resources, setResources] = useState<WorkspaceResource[]>(initial.resources ?? []);
   const [pageSchemas, setPageSchemas] = useState<Record<string, NotionSchema>>({});
+  const [dataSourceSchemas, setDataSourceSchemas] = useState<Record<string, NotionSchema>>({});
   const [view, setView] = useState<View>('board');
   const [activeResourceId, setActiveResourceId] = useState('board-roadmap');
   const [creatingType, setCreatingType] = useState<WorkspaceResource['type'] | null>(null);
@@ -116,10 +116,10 @@ export default function App() {
     workspaceStoreRef.current = store;
     store.initialize(initial);
     const unsubscribe = store.subscribe((state) => {
-      setSchema(state.schema);
       setPages(state.pages);
       setResources(state.resources ?? []);
       setPageSchemas(state.pageSchemas ?? {});
+      setDataSourceSchemas(state.dataSourceSchemas ?? {});
     });
 
     return () => {
@@ -131,7 +131,17 @@ export default function App() {
 
   const openPage = pages.find((page) => page.id === openId) ?? pages[0] ?? null;
   const activeResource = resources.find((resource) => resource.id === activeResourceId);
-  const activeSchema = useMemo(() => schemaForResource(schema, activeResource), [activeResource, schema]);
+  const activeSchema = useMemo(() => schemaForResource(
+    activeResource ? dataSourceSchemas[activeResource.dataSourceId] ?? { properties: [] } : { properties: [] },
+    activeResource,
+  ), [activeResource, dataSourceSchemas]);
+  const schemaCatalog = useMemo(() => {
+    const properties = new Map<string, NotionSchema['properties'][number]>();
+    Object.values(dataSourceSchemas).forEach((sourceSchema) => {
+      sourceSchema.properties.forEach((property) => properties.set(property.id, property));
+    });
+    return { properties: [...properties.values()] };
+  }, [dataSourceSchemas]);
   const openPageResource = openPage
     ? resources.find((resource) => resource.pageIds.includes(openPage.id))
     : undefined;
@@ -139,15 +149,15 @@ export default function App() {
     ? resources.find((resource): resource is BoardResource => resource.type === 'board' && resource.pageIds.includes(openPage.id))
     : undefined;
   const openPageSchema = openPageResource
-    ? schemaForResource(schema, openPageResource)
+    ? schemaForResource(dataSourceSchemas[openPageResource.dataSourceId] ?? { properties: [] }, openPageResource)
     : openPage ? pageSchemas[openPage.id] ?? { properties: [] } : { properties: [] };
   const boardOptions: BoardLinkOption[] = resources.flatMap((resource) => {
     if (resource.type !== 'board') return [];
-    const grouping = schema.properties.find((property) => property.id === resource.statusPropertyId && property.type === 'status');
+    const grouping = dataSourceSchemas[resource.dataSourceId]?.properties.find((property) => property.id === resource.statusPropertyId && property.type === 'status');
     if (!grouping || grouping.type !== 'status') return [];
     return [{
       id: resource.id,
-      databaseId: resource.databaseId,
+      databaseId: resource.dataSourceId,
       title: resource.title,
       lanes: grouping.options.map((option) => ({ id: option.id, name: option.name, color: option.color })),
     }];
@@ -161,7 +171,7 @@ export default function App() {
       }
     : null;
   const statusDefinition = activeResource?.type === 'board'
-    ? schema.properties.find((property) => property.id === activeResource.statusPropertyId && property.type === 'status')
+    ? activeSchema.properties.find((property) => property.id === activeResource.statusPropertyId && property.type === 'status')
     : undefined;
   const statusOptions = statusDefinition?.type === 'status' ? statusDefinition.options : [];
   const boardStatusDefinitions = activeSchema.properties.filter((property) => property.type === 'status');
@@ -169,8 +179,8 @@ export default function App() {
   const draggingPage = draggingId ? pages.find((page) => page.id === draggingId) ?? null : null;
   const visiblePages = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('pt-BR');
-    return normalized ? pages.filter((page) => pageSearchText(page, schema).toLocaleLowerCase('pt-BR').includes(normalized)) : pages;
-  }, [pages, query, schema]);
+    return normalized ? pages.filter((page) => pageSearchText(page, pageSchemas[page.id] ?? { properties: [] }).toLocaleLowerCase('pt-BR').includes(normalized)) : pages;
+  }, [pageSchemas, pages, query]);
   const activePages = useMemo(() => {
     if (!activeResource) return visiblePages;
     const byId = new Map(visiblePages.map((page) => [page.id, page]));
@@ -187,7 +197,7 @@ export default function App() {
 
   function updatePage(id: string, patch: Partial<NotionPageData>) {
     const now = new Date().toISOString();
-    const editedProperty = schema.properties.find((property) => property.type === 'last_edited_time');
+    const editedProperty = pageSchemas[id]?.properties.find((property) => property.type === 'last_edited_time');
     const page = pages.find((item) => item.id === id);
     if (!page) return;
     const nextPatch: Partial<NotionPageData> = { ...patch, lastEditedTime: now };
@@ -213,10 +223,10 @@ export default function App() {
 
     const target = resources.find((resource): resource is BoardResource => resource.type === 'board' && resource.id === placement.boardId);
     if (!target || !placement.laneId) return;
-    if (openPageResource && openPageResource.databaseId !== target.databaseId) {
+    if (openPageResource && openPageResource.dataSourceId !== target.dataSourceId) {
       if (!confirm('Esta pagina pertence a outro database. Mover para o database deste board?')) return;
     }
-    if (openPageResource?.databaseId !== target.databaseId) workspaceStoreRef.current?.linkPage(target.id, openPage.id);
+    if (openPageResource?.dataSourceId !== target.dataSourceId) workspaceStoreRef.current?.linkPage(target.id, openPage.id);
     workspaceStoreRef.current?.updateProperty(openPage.id, target.statusPropertyId, placement.laneId);
     setActiveResourceId(target.id);
   }
@@ -240,7 +250,7 @@ export default function App() {
       primaryPatch = { datePropertyId: replacement.id } as Partial<WorkspaceResource>;
     }
     const databaseSchema = { properties: resourceProperties };
-    workspaceStoreRef.current?.applySchema(resource.databaseId, databaseSchema, fallbackByPropertyId);
+    workspaceStoreRef.current?.applySchema(resource.dataSourceId, databaseSchema, fallbackByPropertyId);
     workspaceStoreRef.current?.updateResource(resource.id, {
       ...primaryPatch,
       propertyIds: resourceProperties.map((property) => property.id),
@@ -250,7 +260,9 @@ export default function App() {
   function createPage(statusId?: string, afterPageId?: string, resourceId?: string) {
     const now = new Date().toISOString();
     const targetResource = resourceId ? resources.find((resource) => resource.id === resourceId) : undefined;
-    const targetSchema = targetResource ? schemaForResource(schema, targetResource) : { properties: [] };
+    const targetSchema = targetResource
+      ? schemaForResource(dataSourceSchemas[targetResource.dataSourceId] ?? { properties: [] }, targetResource)
+      : { properties: [] };
     const properties = Object.fromEntries(targetSchema.properties.map((definition) => [definition.id, emptyValueFor(definition)]));
     if (targetResource?.type === 'board') {
       const grouping = targetSchema.properties.find((definition) => definition.id === targetResource.statusPropertyId && definition.type === 'status');
@@ -263,7 +275,7 @@ export default function App() {
       id: crypto.randomUUID(), icon: '📄', coverUrl: null, title: 'Sem titulo', properties,
       content: null, createdTime: now, lastEditedTime: now,
     };
-    workspaceStoreRef.current?.insertPage(page, afterPageId, targetResource?.databaseId);
+    workspaceStoreRef.current?.insertPage(page, afterPageId, targetResource?.dataSourceId);
     setOpenId(page.id);
     setView('page');
   }
@@ -275,7 +287,7 @@ export default function App() {
 
   function changeBoardGrouping(propertyId: string) {
     if (activeResource?.type !== 'board') return;
-    const nextStatus = schema.properties.find((property) => property.id === propertyId && property.type === 'status');
+    const nextStatus = activeSchema.properties.find((property) => property.id === propertyId && property.type === 'status');
     if (!nextStatus || nextStatus.type !== 'status') return;
     workspaceStoreRef.current?.updateResource(activeResource.id, { statusPropertyId: nextStatus.id } as Partial<WorkspaceResource>);
   }
@@ -368,7 +380,7 @@ export default function App() {
     workspaceStoreRef.current?.insertPage(
       page,
       undefined,
-      activeResource?.type === 'calendar' ? activeResource.databaseId : undefined,
+      activeResource?.type === 'calendar' ? activeResource.dataSourceId : undefined,
     );
     setOpenId(page.id);
     setView('page');
@@ -382,7 +394,7 @@ export default function App() {
 
   function createResource(type: WorkspaceResource['type'], title: string, existingDatePropertyId?: string) {
     const existingDate = type === 'calendar' && existingDatePropertyId
-      ? schema.properties.find((property) => property.id === existingDatePropertyId && property.type === 'date')
+      ? schemaCatalog.properties.find((property) => property.id === existingDatePropertyId && property.type === 'date')
       : undefined;
     const primary = existingDate ?? buildProperty(type === 'board' ? 'status' : 'date', type === 'board' ? `${title} Status` : `${title} Data`);
     const owner = existingDate
@@ -390,10 +402,11 @@ export default function App() {
       : undefined;
     const propertyIds = owner?.propertyIds ?? [primary.id];
     const databaseId = owner?.databaseId ?? createId('database');
+    const dataSourceId = owner?.dataSourceId ?? createId('datasource');
     const id = createId(type);
     const resource: WorkspaceResource = type === 'board'
-      ? { id, databaseId, type, title, pageIds: [], propertyIds, statusPropertyId: primary.id }
-      : { id, databaseId, type, title, pageIds: owner?.pageIds ?? [], propertyIds, datePropertyId: primary.id, timezone: 'America/Sao_Paulo', defaultView: 'month', visibleHours: { from: 7, to: 21 } };
+      ? { id, databaseId, dataSourceId, type, title, pageIds: [], propertyIds, statusPropertyId: primary.id }
+      : { id, databaseId, dataSourceId, type, title, pageIds: owner?.pageIds ?? [], propertyIds, datePropertyId: primary.id, timezone: 'America/Sao_Paulo', defaultView: 'month', visibleHours: { from: 7, to: 21 } };
     workspaceStoreRef.current?.createResource(resource, existingDate ? [] : [primary]);
     setActiveResourceId(resource.id);
     setView(type);
@@ -442,24 +455,24 @@ export default function App() {
   }
 
   function exportWorkspace() {
-    downloadJson('skrbe-workspace', workspaceExport(resources, pages, schema));
+    downloadJson('skrbe-workspace', workspaceExport(resources, pages, schemaCatalog));
   }
 
   if (preview.kind === 'page') {
     const page = pages.find((item) => item.id === preview.id) ?? pages[0];
-    return page ? <EmbeddedPagePreview schema={schema} page={page} /> : null;
+    return page ? <EmbeddedPagePreview schema={pageSchemas[page.id] ?? { properties: [] }} page={page} /> : null;
   }
 
   if (preview.kind === 'board') {
     const resource = resources.find((item): item is BoardResource => item.type === 'board' && item.id === preview.id)
       ?? resources.find((item): item is BoardResource => item.type === 'board');
-    return resource ? <EmbeddedBoardPreview resource={resource} schema={schemaForResource(schema, resource)} pages={pages.filter((page) => resource.pageIds.includes(page.id))} /> : null;
+    return resource ? <EmbeddedBoardPreview resource={resource} schema={schemaForResource(dataSourceSchemas[resource.dataSourceId] ?? { properties: [] }, resource)} pages={pages.filter((page) => resource.pageIds.includes(page.id))} /> : null;
   }
 
   if (preview.kind === 'calendar') {
     const resource = resources.find((item): item is CalendarResource => item.type === 'calendar' && item.id === preview.id)
       ?? resources.find((item): item is CalendarResource => item.type === 'calendar');
-    return resource ? <CalendarView title={resource.title} schema={schemaForResource(schema, resource)} pages={pages.filter((page) => resource.pageIds.includes(page.id))} datePropertyId={resource.datePropertyId} timezone={resource.timezone} defaultView={resource.defaultView} visibleHours={resource.visibleHours} onOpenPage={() => undefined} onCreatePage={() => undefined} onMoveEvent={() => undefined} /> : null;
+    return resource ? <CalendarView title={resource.title} schema={schemaForResource(dataSourceSchemas[resource.dataSourceId] ?? { properties: [] }, resource)} pages={pages.filter((page) => resource.pageIds.includes(page.id))} datePropertyId={resource.datePropertyId} timezone={resource.timezone} defaultView={resource.defaultView} visibleHours={resource.visibleHours} onOpenPage={() => undefined} onCreatePage={() => undefined} onMoveEvent={() => undefined} /> : null;
   }
 
   return (
@@ -500,7 +513,7 @@ export default function App() {
         <header className="lab-topbar">
           <div className="lab-search"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar paginas" /></div>
           <div className="lab-top-actions">
-            <span>{pages.length} paginas · {schema.properties.length} propriedades</span>
+            <span>{pages.length} paginas · {schemaCatalog.properties.length} propriedades</span>
             <button className="lab-theme-toggle" type="button" title={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
               {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
             </button>
@@ -610,7 +623,7 @@ export default function App() {
                 {presence.filter((item) => item.userId !== collabUser.id).slice(0, 3).map((item) => <i key={item.clientId} style={{ background: item.color }} title={`${item.name} · ${item.location}`} />)}
                 {presence.length > 4 ? <b>+{presence.length - 4}</b> : null}
               </button>
-              <div><button type="button" title="Exportar pagina como JSON" onClick={() => downloadJson(openPage.title, pageExport(openPage, schema))}><FileJson size={14} />Exportar JSON</button><button type="button" title="Excluir pagina" onClick={deleteOpenPage}><Trash2 size={14} /></button><button title="Fechar" onClick={() => setView(activeResource?.type ?? 'board')}><X size={15} /></button></div>
+              <div><button type="button" title="Exportar pagina como JSON" onClick={() => downloadJson(openPage.title, pageExport(openPage, openPageSchema))}><FileJson size={14} />Exportar JSON</button><button type="button" title="Excluir pagina" onClick={deleteOpenPage}><Trash2 size={14} /></button><button title="Fechar" onClick={() => setView(activeResource?.type ?? 'board')}><X size={15} /></button></div>
             </div>
             <NotionPageView
               schema={openPageSchema}
@@ -633,7 +646,7 @@ export default function App() {
           </section>
         )}
       </main>
-      {creatingType ? <CreateResourceDialog type={creatingType} schema={schema} onClose={() => setCreatingType(null)} onCreate={createResource} /> : null}
+      {creatingType ? <CreateResourceDialog type={creatingType} schema={schemaCatalog} onClose={() => setCreatingType(null)} onCreate={createResource} /> : null}
     </div>
   );
 }

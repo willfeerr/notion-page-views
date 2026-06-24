@@ -16,7 +16,7 @@ describe('page export', () => {
   it('creates a complete workspace index including independent pages and resources', () => {
     const schema: NotionSchema = { properties: [] };
     const page: NotionPageData = { id: 'p', title: 'Independent page', properties: {}, content: null, createdTime: 'a', lastEditedTime: 'b' };
-    const exported = workspaceExport([{ id: 'board', databaseId: 'roadmap', type: 'board', title: 'Roadmap', pageIds: [], propertyIds: [], statusPropertyId: 'status' }], [page], schema);
+    const exported = workspaceExport([{ id: 'board', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'board', title: 'Roadmap', pageIds: [], propertyIds: [], statusPropertyId: 'status' }], [page], schema);
     expect(exported.index.pages[0]?.searchableText).toBe('Independent page');
     expect(exported.index.resources[0]).toMatchObject({ id: 'board', type: 'board', title: 'Roadmap' });
   });

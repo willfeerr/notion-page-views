@@ -20,9 +20,15 @@ This repository now runs the real React/Lexical components. The table separates 
 | Images, embeds, bookmarks and math | Implemented | URL-based MVP nodes |
 | Local persistence | Implemented | Schema/page snapshot plus persisted binary Yjs state per room |
 | Real-time collaboration | Implemented locally | Yjs over BroadcastChannel; Hocuspocus transport adapter is ready |
+| Database / Data Source separation | Implemented | Versioned container and source rooms with explicit IDs |
+| Canonical page ownership | Implemented | Membership comes from `pageId -> dataSourceId`, never a view list or room scan |
+| Multiple views on one source | Implemented | Rows are shared while view configuration remains independent |
+| v2 source migration | Implemented | Idempotent copy to `datasource:{id}:v1`; legacy rooms remain recoverable |
+| Recoverable schema removal | Implemented | Removed values are archived by stable property ID and restored when re-added |
 | Files property | Missing | Requires upload/storage contract |
 | Formula | Missing | Requires expression engine and dependency graph |
 | Relation and rollup | Missing | Requires database identity and query layer |
+| Recoverable cross-source move | Partial | Ownership commit exists; journal, mapping UI and undo remain |
 | Created-by / edited-by | Missing | Requires authenticated workspace identity |
 | Unique ID | Missing | Requires server-side sequence allocation |
 | Button property and automations | Missing | Requires action/workflow runtime |

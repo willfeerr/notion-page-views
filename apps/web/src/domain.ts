@@ -8,8 +8,9 @@ export const DEFAULT_TIMEZONE = 'America/Sao_Paulo';
 export interface ResourceBase {
   id: string;
   databaseId: string;
+  dataSourceId: string;
   title: string;
-  /** Derived from the database membership; never persisted by a view. */
+  /** Derived from the data source ownership index; never persisted by a view. */
   pageIds: string[];
   /** Properties visible in this view. */
   propertyIds: string[];
@@ -29,6 +30,51 @@ export interface CalendarResource extends ResourceBase {
 }
 
 export type WorkspaceResource = BoardResource | CalendarResource;
+
+export interface DatabaseContainer {
+  id: string;
+  title: string;
+  dataSourceIds: string[];
+  viewIds: string[];
+}
+
+export interface DataSourceReference {
+  id: string;
+  databaseId: string;
+  title: string;
+}
+
+export interface PageOwnership {
+  pageId: string;
+  dataSourceId: string;
+  version: number;
+}
+
+export interface SerializedRowSnapshot {
+  page: {
+    id: string;
+    title: string;
+    properties: Record<string, StoredPropertyValue>;
+  };
+  schema: NotionSchema;
+}
+
+export interface PropertyMapping {
+  sourcePropertyId: string;
+  targetPropertyId?: string;
+  conversion: 'direct' | 'convert' | 'archive';
+}
+
+export interface MoveOperation {
+  id: string;
+  pageId: string;
+  sourceDataSourceId: string;
+  targetDataSourceId: string;
+  expectedParentVersion: number;
+  propertyMapping: PropertyMapping[];
+  sourceSnapshot: SerializedRowSnapshot;
+  status: 'prepared' | 'staged' | 'committed' | 'cleaned';
+}
 
 export function createId(prefix: string): string {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;

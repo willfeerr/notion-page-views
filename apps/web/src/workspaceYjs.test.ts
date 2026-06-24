@@ -1,15 +1,41 @@
 import { describe, expect, it } from 'vitest';
-import { Array as YArray, Doc, applyUpdate, encodeStateAsUpdate } from 'yjs';
+import { Array as YArray, Doc, Map as YMap, applyUpdate, encodeStateAsUpdate } from 'yjs';
 import type { NotionPageData, NotionSchema } from '../notion-page/types';
 import { WorkspaceYjsStore } from './workspaceYjs';
 
 function createStore(onRoom?: (room: string) => void, persisted: Map<string, Doc> = new Map()) {
   return new WorkspaceYjsStore((room, document) => {
     onRoom?.(room);
-    const source = persisted.get(room);
-    if (source) applyUpdate(document, encodeStateAsUpdate(source));
-    return { destroy() {} };
+    const source = persisted.get(room) ?? new Doc();
+    persisted.set(room, source);
+    applyUpdate(document, encodeStateAsUpdate(source));
+    const persist = (update: Uint8Array) => applyUpdate(source, update);
+    document.on('update', persist);
+    return { destroy() { document.off('update', persist); } };
   });
+}
+
+function createLegacyDataSource(sourceSchema: NotionSchema, sourcePages: NotionPageData[]): Doc {
+  const document = new Doc();
+  const definitions = document.getMap<string>('schema-definitions');
+  const definitionOrder = document.getArray<string>('schema-order');
+  const pages = document.getMap<YMap<unknown>>('pages');
+  const pageOrder = document.getArray<string>('page-order');
+  sourceSchema.properties.forEach((definition) => definitions.set(definition.id, JSON.stringify(definition)));
+  definitionOrder.push(sourceSchema.properties.map((definition) => definition.id));
+  sourcePages.forEach((item) => {
+    const row = new YMap<unknown>();
+    const properties = new YMap<unknown>();
+    Object.entries(item.properties).forEach(([id, value]) => properties.set(id, value));
+    row.set('title', item.title);
+    row.set('createdTime', item.createdTime);
+    row.set('lastEditedTime', item.lastEditedTime);
+    row.set('properties', properties);
+    row.set('viewRanks', new YMap<number>());
+    pages.set(item.id, row);
+  });
+  pageOrder.push(sourcePages.map((item) => item.id));
+  return document;
 }
 
 const schema: NotionSchema = {
@@ -37,6 +63,18 @@ describe('WorkspaceYjsStore', () => {
     unsubscribe();
   });
 
+  it('restores a property value when the same property is removed and added again', () => {
+    const store = createStore();
+    store.initialize({ schema, pages: [page] });
+    store.applySchema('roadmap', {
+      properties: schema.properties.filter((property) => property.id !== 'score'),
+    });
+    expect(store.read().pages[0].properties).not.toHaveProperty('score');
+
+    store.applySchema('roadmap', schema);
+    expect(store.read().pages[0].properties.score).toBe('42');
+  });
+
   it('seeds board and calendar with independent configuration', () => {
     const store = createStore();
     store.initialize({ schema, pages: [page] });
@@ -53,7 +91,7 @@ describe('WorkspaceYjsStore', () => {
       options: [{ id: 'new-todo', name: 'Todo', color: 'gray' }], groups: [],
     };
     store.createResource({
-      id: 'board-new', databaseId: 'database-new', type: 'board', title: 'New board', pageIds: [],
+      id: 'board-new', databaseId: 'database-new', dataSourceId: 'source-new', type: 'board', title: 'New board', pageIds: [],
       propertyIds: [boardStatus.id], statusPropertyId: boardStatus.id,
     }, [boardStatus]);
 
@@ -61,7 +99,7 @@ describe('WorkspaceYjsStore', () => {
     const original = resources.find((resource) => resource.id === 'board-roadmap');
     const created = resources.find((resource) => resource.id === 'board-new');
     expect(created).toMatchObject({
-      databaseId: 'database-new', pageIds: [], propertyIds: ['status-new-board'], statusPropertyId: 'status-new-board',
+      databaseId: 'database-new', dataSourceId: 'source-new', pageIds: [], propertyIds: ['status-new-board'], statusPropertyId: 'status-new-board',
     });
     expect(original?.pageIds).toEqual(['page-1']);
     expect(original?.propertyIds).not.toContain('status-new-board');
@@ -116,12 +154,12 @@ describe('WorkspaceYjsStore', () => {
       options: [{ id: 'isolated-todo', name: 'Todo', color: 'gray' }], groups: [],
     };
     store.createResource({
-      id: 'isolated-board', databaseId: 'isolated-db', type: 'board', title: 'Isolated',
+      id: 'isolated-board', databaseId: 'isolated-db', dataSourceId: 'isolated-source', type: 'board', title: 'Isolated',
       pageIds: [], propertyIds: [isolatedStatus.id], statusPropertyId: isolatedStatus.id,
     }, [isolatedStatus]);
     store.insertPage({
       ...page, id: 'isolated-page', properties: { [isolatedStatus.id]: 'isolated-todo' },
-    }, undefined, 'isolated-db');
+    }, undefined, 'isolated-source');
 
     const state = store.read();
     const original = state.resources?.find((resource) => resource.id === 'board-roadmap');
@@ -158,6 +196,7 @@ describe('WorkspaceYjsStore', () => {
 
     expect(store.read().resources?.find((item) => item.id === 'legacy-board')).toMatchObject({
       databaseId: 'db-legacy-board',
+      dataSourceId: 'db-legacy-board',
       pageIds: ['page-1'],
       propertyIds: ['status'],
       statusPropertyId: 'status',
@@ -169,8 +208,65 @@ describe('WorkspaceYjsStore', () => {
     const store = createStore((room) => rooms.push(room));
     store.initialize({ schema, pages: [page] });
     expect(rooms).toContain('workspace:notion-pages-lab');
-    expect(rooms).toContain('database:roadmap:v2');
+    expect(rooms).toContain('database:roadmap:v1');
+    expect(rooms).toContain('datasource:roadmap:v1');
     expect(rooms).toContain('view:board-roadmap');
     expect(rooms).toContain('view:calendar-product');
+  });
+
+  it('keeps two views on one data source sharing rows but not view configuration', () => {
+    const store = createStore();
+    store.initialize({ schema, pages: [page] });
+    store.createResource({
+      id: 'calendar-shared', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'calendar',
+      title: 'Shared calendar', pageIds: [], propertyIds: ['due'], datePropertyId: 'due',
+      timezone: 'America/Sao_Paulo', defaultView: 'week', visibleHours: { from: 8, to: 18 },
+    });
+
+    store.updateResource('calendar-shared', { defaultView: 'agenda' });
+    const resources = store.read().resources ?? [];
+    expect(resources.find((item) => item.id === 'calendar-shared')?.pageIds).toEqual(['page-1']);
+    expect(resources.find((item) => item.id === 'board-roadmap')?.pageIds).toEqual(['page-1']);
+    expect(resources.find((item) => item.id === 'calendar-shared')).toMatchObject({ defaultView: 'agenda' });
+    expect(resources.find((item) => item.id === 'calendar-product')).toMatchObject({ defaultView: 'month' });
+  });
+
+  it('migrates database v2 to data source v1 idempotently without losing values', () => {
+    const workspace = new Doc();
+    workspace.getMap<string>('resource-references').set('board-roadmap', JSON.stringify({
+      id: 'board-roadmap', type: 'board', databaseId: 'roadmap',
+    }));
+    workspace.getArray<string>('resource-order').push(['board-roadmap']);
+    workspace.getMap<string>('database-references').set('roadmap', JSON.stringify({ id: 'roadmap', title: 'Roadmap' }));
+    workspace.getArray<string>('database-order').push(['roadmap']);
+
+    const view = new Doc();
+    const resource = view.getMap<unknown>('resource');
+    resource.set('type', 'board');
+    resource.set('databaseId', 'roadmap');
+    resource.set('title', 'Roadmap');
+    resource.set('statusPropertyId', 'status');
+    const propertyIds = new YArray<string>();
+    propertyIds.push(['status', 'due', 'score']);
+    resource.set('propertyIds', propertyIds);
+
+    const persisted = new Map<string, Doc>([
+      ['workspace:notion-pages-lab', workspace],
+      ['database:roadmap:v2', createLegacyDataSource(schema, [page])],
+      ['view:board-roadmap', view],
+    ]);
+    const first = createStore(undefined, persisted);
+    first.initialize({ schema, pages: [page] });
+    const firstState = first.read();
+    first.destroy();
+
+    const second = createStore(undefined, persisted);
+    second.initialize({ schema, pages: [page] });
+    const secondState = second.read();
+    expect(secondState.pages).toEqual(firstState.pages);
+    expect(secondState.pages).toHaveLength(1);
+    expect(secondState.pages[0].properties).toEqual(page.properties);
+    expect(secondState.ownership?.['page-1']).toMatchObject({ dataSourceId: 'roadmap', version: 1 });
+    expect(secondState.dataSources).toEqual([{ id: 'roadmap', databaseId: 'roadmap', title: 'Roadmap' }]);
   });
 });
