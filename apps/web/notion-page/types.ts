@@ -11,9 +11,11 @@ export interface PersonOption { id: string; name: string; avatarUrl?: string; av
 export type PropertyType =
   | 'text' | 'number' | 'select' | 'multi_select' | 'status'
   | 'date' | 'person' | 'checkbox' | 'url' | 'email' | 'phone'
-  | 'relation' | 'created_time' | 'last_edited_time';
+  | 'relation' | 'files' | 'unique_id' | 'created_by' | 'last_edited_by' | 'place'
+  | 'formula' | 'rollup'
+  | 'created_time' | 'last_edited_time';
 
-interface PropertyDefinitionBase { id: string; name: string; type: PropertyType; }
+interface PropertyDefinitionBase { id: string; name: string; type: PropertyType; description?: string; }
 export interface TextPropertyDefinition extends PropertyDefinitionBase { type: 'text'; }
 export interface NumberPropertyDefinition extends PropertyDefinitionBase {
   type: 'number'; format?: 'plain' | 'currency' | 'percent'; currency?: string;
@@ -46,6 +48,22 @@ export interface RelationPropertyDefinition extends PropertyDefinitionBase {
   targetDataSourceId: string;
   multiple?: boolean;
 }
+export interface FilesPropertyDefinition extends PropertyDefinitionBase { type: 'files'; }
+export interface UniqueIdPropertyDefinition extends PropertyDefinitionBase { type: 'unique_id'; prefix?: string; }
+export interface CreatedByPropertyDefinition extends PropertyDefinitionBase { type: 'created_by'; }
+export interface LastEditedByPropertyDefinition extends PropertyDefinitionBase { type: 'last_edited_by'; }
+export interface PlacePropertyDefinition extends PropertyDefinitionBase { type: 'place'; }
+export type FormulaExpression =
+  | { kind: 'literal'; value: string | number | boolean | null }
+  | { kind: 'property'; propertyId: string }
+  | { kind: 'operation'; operator: 'add' | 'subtract' | 'multiply' | 'divide' | 'concat'; left: FormulaExpression; right: FormulaExpression };
+export interface FormulaPropertyDefinition extends PropertyDefinitionBase { type: 'formula'; expression: FormulaExpression; }
+export interface RollupPropertyDefinition extends PropertyDefinitionBase {
+  type: 'rollup';
+  relationPropertyId: string;
+  targetPropertyId?: string;
+  calculation: 'count' | 'count_values' | 'sum' | 'average' | 'min' | 'max' | 'show_unique';
+}
 
 export interface RelationPageOption { id: string; title: string; icon?: string | null; }
 export interface RelationTargetOption { id: string; title: string; pages: RelationPageOption[]; }
@@ -63,7 +81,9 @@ export type PropertyDefinition =
   | DatePropertyDefinition | PersonPropertyDefinition | CheckboxPropertyDefinition
   | UrlPropertyDefinition | EmailPropertyDefinition | PhonePropertyDefinition
   | CreatedTimePropertyDefinition | LastEditedTimePropertyDefinition
-  | RelationPropertyDefinition;
+  | RelationPropertyDefinition | FilesPropertyDefinition | UniqueIdPropertyDefinition
+  | CreatedByPropertyDefinition | LastEditedByPropertyDefinition | PlacePropertyDefinition
+  | FormulaPropertyDefinition | RollupPropertyDefinition;
 
 export type StoredPropertyValue = string | number | boolean | string[] | DateRangeValue | null | undefined;
 export type PageProperties = Record<string, StoredPropertyValue>;

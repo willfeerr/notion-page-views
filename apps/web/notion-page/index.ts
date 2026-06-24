@@ -54,6 +54,9 @@ export type {
   UrlPropertyDefinition, EmailPropertyDefinition, PhonePropertyDefinition,
   CreatedTimePropertyDefinition, LastEditedTimePropertyDefinition,
   RelationPropertyDefinition, RelationPageOption, RelationTargetOption,
+  FilesPropertyDefinition, UniqueIdPropertyDefinition, CreatedByPropertyDefinition,
+  LastEditedByPropertyDefinition, PlacePropertyDefinition,
+  FormulaPropertyDefinition, FormulaExpression, RollupPropertyDefinition,
 } from './types';
 export type { CalloutColor } from './editor/nodes/CalloutNode';
 export type { ColumnCount } from './editor/nodes/ColumnLayoutNode';

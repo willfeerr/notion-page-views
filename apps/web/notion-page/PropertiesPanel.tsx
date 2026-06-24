@@ -41,11 +41,11 @@ function isEmptyValue(val: StoredPropertyValue): boolean {
   return false;
 }
 
-const ALWAYS_SHOW_TYPES: PropertyType[] = ['checkbox', 'created_time', 'last_edited_time'];
+const ALWAYS_SHOW_TYPES: PropertyType[] = ['checkbox', 'created_time', 'last_edited_time', 'unique_id', 'created_by', 'last_edited_by'];
 
 const ADDABLE_TYPES: PropertyType[] = [
   'text','number','select','multi_select','status','date','person',
-  'checkbox','url','email','phone','relation',
+  'checkbox','url','email','phone','relation','files','unique_id','created_by','last_edited_by','place',
 ];
 
 function createId(prefix: string): string {
@@ -82,6 +82,8 @@ function buildNewProperty(type: PropertyType, people: PersonOption[] = [], relat
       return { id, name: 'Data', type, includeTime: true, timezone: 'America/Sao_Paulo' };
     case 'relation':
       return { id, name: 'Relação', type, targetDataSourceId: relationTargetId, multiple: true };
+    case 'unique_id':
+      return { id, name: 'ID', type, prefix: 'PAGE' };
     default:
       return { id, name: PROPERTY_TYPE_LABELS[type] ?? type, type } as PropertyDefinition;
   }

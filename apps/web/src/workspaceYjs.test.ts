@@ -255,6 +255,16 @@ describe('WorkspaceYjsStore', () => {
     expect(store.read().pages.find((item) => item.id === 'page-1')?.properties.relation).toEqual([]);
   });
 
+  it('allocates unique IDs during schema changes and protects system values', () => {
+    const store = createStore();
+    store.initialize({ schema, pages: [page] });
+    store.applySchema('roadmap', { properties: [...schema.properties, { id: 'uid', name: 'ID', type: 'unique_id', prefix: 'TASK' }] });
+    const generated = store.read().pages[0].properties.uid;
+    expect(generated).toBe('TASK-PAGE-1');
+    store.updateProperty('page-1', 'uid', 'MANUAL-1');
+    expect(store.read().pages[0].properties.uid).toBe(generated);
+  });
+
   it('keeps pages and schemas isolated between newly created databases', () => {
     const store = createStore();
     store.initialize({ schema, pages: [page] });

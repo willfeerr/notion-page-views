@@ -13,11 +13,12 @@ import { DatabaseCollectionView } from './DatabaseCollectionView';
 import { WorkspaceYjsStore } from './workspaceYjs';
 import { downloadJson, pageExport, pageSearchText, workspaceExport } from './exportJson';
 import {
-  buildInitialDataSourceProperties, buildProperty, createId, emptyValueFor, normalizeDateValue, schemaForResource,
+  buildInitialDataSourceProperties, buildProperty, createId, normalizeDateValue, schemaForResource,
   type BoardResource, type CalendarResource, type PageOwnership, type PropertyMapping, type WorkspaceResource,
 } from './domain';
 import { ROOM_NAMES } from './yjs/model';
 import { executeViewQuery } from './viewQuery';
+import { defaultPropertyValue } from './propertyRegistry';
 
 type View = WorkspaceResource['type'] | 'page';
 
@@ -294,7 +295,9 @@ export default function App() {
     const targetSchema = targetResource
       ? schemaForResource(dataSourceSchemas[targetResource.dataSourceId] ?? { properties: [] }, targetResource)
       : { properties: [] };
-    const properties = Object.fromEntries(targetSchema.properties.map((definition) => [definition.id, emptyValueFor(definition)]));
+    const properties = Object.fromEntries(targetSchema.properties.map((definition) => [
+      definition.id, defaultPropertyValue(definition, { pageId: 'pending', userId: collabUser.id }),
+    ]));
     if (targetResource?.type === 'board') {
       const grouping = targetSchema.properties.find((definition) => definition.id === targetResource.statusPropertyId && definition.type === 'status');
       if (grouping && statusId && statusId !== '__unassigned__') properties[grouping.id] = statusId;
@@ -306,6 +309,9 @@ export default function App() {
       id: crypto.randomUUID(), icon: '📄', coverUrl: null, title: 'Sem titulo', properties,
       content: null, createdTime: now, lastEditedTime: now,
     };
+    targetSchema.properties.filter((definition) => definition.type === 'unique_id').forEach((definition) => {
+      properties[definition.id] = defaultPropertyValue(definition, { pageId: page.id, userId: collabUser.id });
+    });
     workspaceStoreRef.current?.insertPage(page, afterPageId, targetResource?.dataSourceId);
     setOpenId(page.id);
     setView('page');
@@ -404,13 +410,14 @@ export default function App() {
   function createCalendarPage(datePropertyId: string, start: string, end?: string) {
     const statusId = statusOptions[0]?.id;
     const now = new Date().toISOString();
-    const properties = Object.fromEntries(activeSchema.properties.map((definition) => [definition.id, emptyValueFor(definition)]));
+    const pageId = crypto.randomUUID();
+    const properties = Object.fromEntries(activeSchema.properties.map((definition) => [definition.id, defaultPropertyValue(definition, { pageId, userId: collabUser.id })]));
     properties[datePropertyId] = normalizeDateValue({ start, end: end ?? start, allDay: start.length <= 10 }, activeResource?.type === 'calendar' ? activeResource.timezone : undefined);
     if (statusDefinition && statusId) properties[statusDefinition.id] = statusId;
     for (const definition of activeSchema.properties) {
       if (definition.type === 'created_time' || definition.type === 'last_edited_time') properties[definition.id] = now;
     }
-    const page: NotionPageData = { id: crypto.randomUUID(), icon: '📅', coverUrl: null, title: 'Novo evento', properties, content: null, createdTime: now, lastEditedTime: now };
+    const page: NotionPageData = { id: pageId, icon: '📅', coverUrl: null, title: 'Novo evento', properties, content: null, createdTime: now, lastEditedTime: now };
     workspaceStoreRef.current?.insertPage(
       page,
       undefined,

@@ -60,6 +60,12 @@ Removing a property archives its row values inside the data source. Adding the s
 
 The one-time `audit-properties-v1` repair restores legacy Created time and Last edited time definitions that were previously hidden by a view projection. New data sources create both audit properties by default.
 
+Property defaults, read-only behavior, serialization and comparison are registered by type. The registry now
+covers the existing property set plus Relation, Files (URL-backed until object storage exists), Unique ID,
+Created by, Last edited by and Place. Unique IDs are deterministic per page and system-managed properties reject
+manual row updates. Formula and Rollup remain derived types and will be evaluated over this registry rather than
+stored as user-editable values.
+
 Standalone pages have no database properties. They must be moved into a database before receiving Status, Date, Person or other database fields.
 
 A Relation definition stores its `targetDataSourceId`; row values contain only referenced page IDs. Updating a

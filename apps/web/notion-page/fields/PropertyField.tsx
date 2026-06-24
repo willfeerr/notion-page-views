@@ -9,6 +9,7 @@ import { MultiSelectField } from './MultiSelectField';
 import { PersonField } from './PersonField';
 import { TimestampField } from './TimestampField';
 import { RelationField } from './RelationField';
+import { FilesField } from './FilesField';
 
 interface PropertyFieldProps {
   definition: PropertyDefinition;
@@ -38,6 +39,8 @@ export function PropertyField({
       return <TextLikeField kind="email" value={value} compact={compact} onChange={onChange} />;
     case 'phone':
       return <TextLikeField kind="phone" value={value} compact={compact} onChange={onChange} />;
+    case 'place':
+      return <TextLikeField kind="text" value={value} compact={compact} onChange={onChange} />;
     case 'checkbox':
       return <CheckboxField value={value as boolean | null | undefined} compact={compact}
         onChange={(v) => onChange?.(v)} />;
@@ -73,6 +76,14 @@ export function PropertyField({
     case 'relation':
       return <RelationField options={relationOptions} value={value as string[] | null | undefined}
         compact={compact} multiple={definition.multiple} onChange={onChange ? (next) => onChange(next) : undefined} />;
+    case 'files':
+      return <FilesField value={value as string[] | null | undefined} compact={compact} onChange={onChange ? (next) => onChange(next) : undefined} />;
+    case 'unique_id':
+    case 'created_by':
+    case 'last_edited_by':
+    case 'formula':
+    case 'rollup':
+      return <span className="npc-system-value">{value !== null && value !== undefined && !Array.isArray(value) && typeof value !== 'object' ? String(value) : 'Vazio'}</span>;
     case 'created_time':
     case 'last_edited_time':
       return <TimestampField value={value as string | null | undefined} locale={locale} />;

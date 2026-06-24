@@ -1797,6 +1797,13 @@
 .npc-relation-pill button { border: 0; background: none; color: var(--npc-text-secondary); padding: 0; display: grid; place-items: center; }
 .npc-relation-compact b { font-size: 10px; color: var(--npc-text-secondary); }
 .npc-options-empty { display: block; padding: 10px; color: var(--npc-text-secondary); font-size: 12px; }
+.npc-files-field { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; }
+.npc-files-field > span, .npc-file-compact { display: inline-flex; align-items: center; gap: 4px; max-width: 220px; padding: 3px 6px; border-radius: 4px; background: var(--npc-hover-bg); font-size: 11px; }
+.npc-files-field a { overflow: hidden; color: var(--npc-text); text-overflow: ellipsis; white-space: nowrap; }
+.npc-files-field > span button, .npc-files-field form button { display: grid; place-items: center; border: 0; background: none; color: var(--npc-text-secondary); }
+.npc-files-field form { display: flex; align-items: center; gap: 3px; }
+.npc-files-field form input { width: min(180px, 34vw); height: 26px; border: 1px solid var(--npc-border); border-radius: 4px; background: var(--npc-bg); color: var(--npc-text); padding: 0 6px; }
+.npc-system-value { overflow: hidden; color: var(--npc-text-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ═══════════════════════════════════════════════════════════════
    COLLABORATION CURSORS (Lexical awareness API)

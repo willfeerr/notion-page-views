@@ -9,6 +9,8 @@ import {
   type TimelineResource, type WorkspaceResource,
 } from './domain';
 import { ROOM_NAMES } from './yjs/model';
+import { defaultPropertyValue, PROPERTY_REGISTRY } from './propertyRegistry';
+import { materializeComputedProperties } from './computedProperties';
 
 export interface WorkspaceSeed {
   schema: NotionSchema;
@@ -588,12 +590,13 @@ export class WorkspaceYjsStore {
 
   read(): WorkspaceState {
     const rooms = [...this.dataSourceRooms.values()];
-    const pages = rooms.flatMap((room) => roomPages(room, this.ownedPageIds(room), this.initialContent));
+    const rawPages = rooms.flatMap((room) => roomPages(room, this.ownedPageIds(room), this.initialContent));
     const pageSchemas = Object.fromEntries(rooms.flatMap((room) => {
       const dataSourceSchema = roomSchema(room);
       return this.ownedPageIds(room).map((pageId) => [pageId, dataSourceSchema]);
     }));
     const dataSourceSchemas = Object.fromEntries(rooms.map((room) => [room.id, roomSchema(room)]));
+    const pages = materializeComputedProperties(rawPages, pageSchemas);
     const ownership = Object.fromEntries([...this.pageOwnership.entries()].flatMap(([pageId, value]) => {
       const parsed = safeJson<PageOwnership>(value);
       return parsed ? [[pageId, parsed]] : [];
@@ -784,7 +787,7 @@ export class WorkspaceYjsStore {
       [...room.definitions.keys()].forEach((id) => { if (!nextIds.has(id)) room.definitions.delete(id); });
       schema.properties.forEach((definition) => room.definitions.set(definition.id, JSON.stringify(definition)));
       replaceArray(room.definitionOrder, schema.properties.map((definition) => definition.id));
-      room.pages.forEach((page) => {
+      room.pages.forEach((page, pageId) => {
         const properties = page.get('properties');
         if (!(properties instanceof YMap)) return;
         const storedArchive = page.get('archivedProperties');
@@ -803,7 +806,7 @@ export class WorkspaceYjsStore {
             : properties.get(definition.id);
           const nextValue = previous.has(definition.id)
             ? convertPropertyValue(definition, previous.get(definition.id), restored, fallbackByPropertyId[definition.id])
-            : restored ?? fallbackByPropertyId[definition.id] ?? emptyValueFor(definition);
+            : restored ?? fallbackByPropertyId[definition.id] ?? defaultPropertyValue(definition, { pageId });
           properties.set(definition.id, nextValue);
           archived.delete(definition.id);
         });
@@ -980,7 +983,7 @@ export class WorkspaceYjsStore {
       }
       if (definition.type === 'created_time') return [definition.id, sourcePage.createdTime];
       if (definition.type === 'last_edited_time') return [definition.id, sourcePage.lastEditedTime];
-      return [definition.id, emptyValueFor(definition)];
+      return [definition.id, defaultPropertyValue(definition, { pageId: operation.pageId })];
     }));
     return { ...sourcePage, properties, content: this.initialContent.get(operation.pageId) ?? null };
   }
@@ -1249,12 +1252,16 @@ export class WorkspaceYjsStore {
     const properties = page?.get('properties');
     if (!room || !(page instanceof YMap) || !(properties instanceof YMap)) return;
     const definition = roomSchema(room).properties.find((candidate) => candidate.id === propertyId);
+    if (definition && PROPERTY_REGISTRY[definition.type].readOnly) return;
     const validated = definition?.type === 'relation'
       ? (Array.isArray(value) ? value : []).filter((relatedPageId) => this.readOwnership(relatedPageId)?.dataSourceId === definition.targetDataSourceId)
       : value;
+    const edited = roomSchema(room).properties.find((candidate) => candidate.type === 'last_edited_time');
+    const now = new Date().toISOString();
     room.document.transact(() => {
       if (!valuesEqual(properties.get(propertyId), validated)) properties.set(propertyId, validated);
-      page.set('lastEditedTime', new Date().toISOString());
+      if (edited) properties.set(edited.id, now);
+      page.set('lastEditedTime', now);
     }, 'property-change');
   }
 

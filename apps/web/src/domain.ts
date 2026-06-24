@@ -2,6 +2,7 @@ import type {
   DateRangeValue, NotionSchema, PersonOption, PropertyDefinition,
   PropertyType, StoredPropertyValue,
 } from '../notion-page/types';
+import { defaultPropertyValue } from './propertyRegistry';
 
 export const DEFAULT_TIMEZONE = 'America/Sao_Paulo';
 
@@ -171,6 +172,13 @@ export function buildProperty(type: PropertyType, name?: string, people: PersonO
   if (type === 'person') return { id, name: name ?? 'Pessoa', type, people, multiple: true };
   if (type === 'date') return { id, name: name ?? 'Data', type, includeTime: true, timezone: DEFAULT_TIMEZONE };
   if (type === 'relation') return { id, name: name ?? 'Relação', type, targetDataSourceId: 'standalone', multiple: true };
+  if (type === 'unique_id') return { id, name: name ?? 'ID', type, prefix: 'PAGE' };
+  if (type === 'files') return { id, name: name ?? 'Arquivos', type };
+  if (type === 'created_by') return { id, name: name ?? 'Criado por', type };
+  if (type === 'last_edited_by') return { id, name: name ?? 'Editado por', type };
+  if (type === 'place') return { id, name: name ?? 'Local', type };
+  if (type === 'formula') return { id, name: name ?? 'Fórmula', type, expression: { kind: 'literal', value: null } };
+  if (type === 'rollup') return { id, name: name ?? 'Rollup', type, relationPropertyId: '', calculation: 'count' };
   return { id, name: name ?? type, type } as PropertyDefinition;
 }
 
@@ -183,9 +191,7 @@ export function buildInitialDataSourceProperties(primary: PropertyDefinition): P
 }
 
 export function emptyValueFor(definition: PropertyDefinition): StoredPropertyValue {
-  if (definition.type === 'checkbox') return false;
-  if (definition.type === 'multi_select' || definition.type === 'person' || definition.type === 'relation') return [];
-  return null;
+  return defaultPropertyValue(definition);
 }
 
 export function convertPropertyValue(
@@ -213,6 +219,7 @@ export function convertPropertyValue(
     }
     if (definition.type === 'date') return normalizeDateValue(value, definition.timezone) ?? null;
     if (definition.type === 'relation') return Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
+    if (definition.type === 'files') return Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
     return emptyValueFor(definition);
   }
   if (definition.type === 'select' || definition.type === 'status') {
@@ -228,6 +235,7 @@ export function convertPropertyValue(
     return definition.multiple === false ? selected.slice(0, 1) : selected;
   }
   if (definition.type === 'relation') return Array.isArray(value) ? value : [];
+  if (definition.type === 'files') return Array.isArray(value) ? value : [];
   if (definition.type === 'checkbox') return Boolean(value);
   if (definition.type === 'number') return typeof value === 'number' ? value : null;
   if (definition.type === 'date') return normalizeDateValue(value, definition.timezone);
