@@ -1,4 +1,6 @@
-import type { SerializedEditorState } from 'lexical';
+import type { SerializedEditorState, SerializedLexicalNode } from 'lexical';
+
+export type NotionSerializedEditorState = SerializedEditorState<SerializedLexicalNode & Record<string, unknown>>;
 
 export type PropertyColor =
   | 'default' | 'gray' | 'brown' | 'orange' | 'yellow'
@@ -20,34 +22,18 @@ export interface TextPropertyDefinition extends PropertyDefinitionBase { type: '
 export interface NumberPropertyDefinition extends PropertyDefinitionBase {
   type: 'number'; format?: 'plain' | 'currency' | 'percent'; currency?: string;
 }
-export interface SelectPropertyDefinition extends PropertyDefinitionBase {
-  type: 'select'; options: SelectOption[];
-}
-export interface MultiSelectPropertyDefinition extends PropertyDefinitionBase {
-  type: 'multi_select'; options: SelectOption[];
-}
-export interface StatusPropertyDefinition extends PropertyDefinitionBase {
-  type: 'status'; options: SelectOption[]; groups: StatusGroup[];
-}
-export interface DatePropertyDefinition extends PropertyDefinitionBase {
-  type: 'date';
-  includeTime?: boolean;
-  timezone?: string;
-}
-export interface PersonPropertyDefinition extends PropertyDefinitionBase {
-  type: 'person'; people: PersonOption[]; multiple?: boolean;
-}
+export interface SelectPropertyDefinition extends PropertyDefinitionBase { type: 'select'; options: SelectOption[]; }
+export interface MultiSelectPropertyDefinition extends PropertyDefinitionBase { type: 'multi_select'; options: SelectOption[]; }
+export interface StatusPropertyDefinition extends PropertyDefinitionBase { type: 'status'; options: SelectOption[]; groups: StatusGroup[]; }
+export interface DatePropertyDefinition extends PropertyDefinitionBase { type: 'date'; includeTime?: boolean; timezone?: string; }
+export interface PersonPropertyDefinition extends PropertyDefinitionBase { type: 'person'; people: PersonOption[]; multiple?: boolean; }
 export interface CheckboxPropertyDefinition extends PropertyDefinitionBase { type: 'checkbox'; }
 export interface UrlPropertyDefinition extends PropertyDefinitionBase { type: 'url'; }
 export interface EmailPropertyDefinition extends PropertyDefinitionBase { type: 'email'; }
 export interface PhonePropertyDefinition extends PropertyDefinitionBase { type: 'phone'; }
 export interface CreatedTimePropertyDefinition extends PropertyDefinitionBase { type: 'created_time'; }
 export interface LastEditedTimePropertyDefinition extends PropertyDefinitionBase { type: 'last_edited_time'; }
-export interface RelationPropertyDefinition extends PropertyDefinitionBase {
-  type: 'relation';
-  targetDataSourceId: string;
-  multiple?: boolean;
-}
+export interface RelationPropertyDefinition extends PropertyDefinitionBase { type: 'relation'; targetDataSourceId: string; multiple?: boolean; }
 export interface FilesPropertyDefinition extends PropertyDefinitionBase { type: 'files'; }
 export interface UniqueIdPropertyDefinition extends PropertyDefinitionBase { type: 'unique_id'; prefix?: string; }
 export interface CreatedByPropertyDefinition extends PropertyDefinitionBase { type: 'created_by'; }
@@ -88,21 +74,10 @@ export type PropertyDefinition =
 export type StoredPropertyValue = string | number | boolean | string[] | DateRangeValue | null | undefined;
 export type PageProperties = Record<string, StoredPropertyValue>;
 
-export interface NotionSchema {
-  properties: PropertyDefinition[];
-}
+export interface NotionSchema { properties: PropertyDefinition[]; }
 
-export interface DatabasePageLayoutSection {
-  id: string;
-  title: string;
-  propertyIds: string[];
-  collapsed?: boolean;
-}
-
-export interface DatabasePageLayout {
-  pinnedPropertyIds: string[];
-  sections: DatabasePageLayoutSection[];
-}
+export interface DatabasePageLayoutSection { id: string; title: string; propertyIds: string[]; collapsed?: boolean; }
+export interface DatabasePageLayout { pinnedPropertyIds: string[]; sections: DatabasePageLayoutSection[]; }
 
 export interface DatabasePageTemplate {
   id: string;
@@ -112,16 +87,12 @@ export interface DatabasePageTemplate {
   coverUrl?: string | null;
   coverPosition?: number;
   properties: PageProperties;
-  content: SerializedEditorState | null;
+  content: NotionSerializedEditorState | null;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface PageBlockReference {
-  pageId: string;
-  blockId: string;
-}
-
+export interface PageBlockReference { pageId: string; blockId: string; }
 export interface PageCommentThread {
   id: string;
   pageId: string;
@@ -131,7 +102,6 @@ export interface PageCommentThread {
   updatedAt: string;
   commentIds: string[];
 }
-
 export interface PageComment {
   id: string;
   threadId: string;
@@ -143,24 +113,9 @@ export interface PageComment {
   updatedAt: string;
 }
 
-export interface BoardLinkLane {
-  id: string;
-  name: string;
-  color: PropertyColor;
-}
-
-export interface BoardLinkOption {
-  id: string;
-  databaseId: string;
-  title: string;
-  lanes: BoardLinkLane[];
-}
-
-export interface BoardLinkValue {
-  boardId: string;
-  laneId: string | null;
-}
-
+export interface BoardLinkLane { id: string; name: string; color: PropertyColor; }
+export interface BoardLinkOption { id: string; databaseId: string; title: string; lanes: BoardLinkLane[]; }
+export interface BoardLinkValue { boardId: string; laneId: string | null; }
 
 /**
  * Config for Hocuspocus real-time collaboration.
@@ -188,13 +143,7 @@ export interface CollabConfig {
   onPresenceChange?: (presence: CollabPresence[]) => void;
 }
 
-export interface CollabPresence {
-  clientId: number;
-  userId: string;
-  name: string;
-  color: string;
-  location: string;
-}
+export interface CollabPresence { clientId: number; userId: string; name: string; color: string; location: string; }
 
 export interface NotionPageData {
   id: string;
@@ -205,7 +154,7 @@ export interface NotionPageData {
   title: string;
   properties: PageProperties;
   /** Serializable mirror used to bootstrap, export and index the Yjs-backed editor. */
-  content: SerializedEditorState | null;
+  content: NotionSerializedEditorState | null;
   /** Small database projection used before the page Y.Doc is loaded. */
   contentPreview?: string;
   createdTime: string;
