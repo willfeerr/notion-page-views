@@ -12,10 +12,10 @@ import {
 import { CSS as DndCSS } from '@dnd-kit/utilities';
 import {
   Plus, ChevronDown, ChevronUp, MoreHorizontal,
-  Trash2, Edit3, GripVertical, ArrowRight, LayoutDashboard, X,
+  Trash2, Edit3, GripVertical, ArrowRight,
 } from 'lucide-react';
 import type {
-  BoardLinkOption, BoardLinkValue, NotionSchema, PageProperties, PropertyDefinition,
+  NotionSchema, PageProperties, PropertyDefinition,
   DatabasePageLayout, PersonOption, PropertyType, RelationTargetOption, SelectOption, StoredPropertyValue,
 } from './types';
 import { PROPERTY_ICONS, PROPERTY_TYPE_LABELS } from './propertyTokens';
@@ -29,13 +29,9 @@ interface PropertiesPanelProps {
   locale?: string;
   onChange?: (propertyId: string, next: StoredPropertyValue) => void;
   onSchemaChange?: (schema: NotionSchema) => void;
-  boardOptions?: BoardLinkOption[];
-  boardPlacement?: BoardLinkValue | null;
-  onBoardPlacementChange?: (placement: BoardLinkValue | null) => void;
   relationTargets?: RelationTargetOption[];
   layout?: DatabasePageLayout;
   onLayoutChange?: (layout: DatabasePageLayout) => void;
-  // schema passed here for context (not used directly — parent owns state)
 }
 
 function isEmptyValue(val: StoredPropertyValue): boolean {
@@ -62,7 +58,7 @@ function buildNewProperty(type: PropertyType, people: PersonOption[] = [], relat
       return { id, name: 'Select', type, options: [] };
     case 'multi_select':
       return { id, name: 'Multi-select', type, options: [] };
-    case 'status':
+    case 'status': {
       const todoId = createId('status');
       const doingId = createId('status');
       const doneId = createId('status');
@@ -79,6 +75,7 @@ function buildNewProperty(type: PropertyType, people: PersonOption[] = [], relat
           { id: createId('group'), name: 'Concluído', color: 'green', optionIds: [doneId] },
         ],
       };
+    }
     case 'person':
       return { id, name: 'Pessoa', type, people, multiple: true };
     case 'date':
@@ -92,7 +89,6 @@ function buildNewProperty(type: PropertyType, people: PersonOption[] = [], relat
   }
 }
 
-// ─── Sortable row ───────────────────────────────────────────────
 interface SortableRowProps {
   definition: PropertyDefinition;
   properties: PageProperties;
@@ -101,9 +97,6 @@ interface SortableRowProps {
   renameDraft: string;
   readOnly: boolean;
   onChange?: (id: string, val: StoredPropertyValue) => void;
-  onSchemaChange?: (schema: NotionSchema) => void;
-  // schema passed here for context (not used directly — parent owns state)
-  // Note: schema is passed to enable context-aware type changes
   onStartRename: (id: string, current: string) => void;
   onFinishRename: (id: string) => void;
   onCancelRename: () => void;
@@ -124,17 +117,8 @@ function SortablePropertyRow({
   onDelete, onChangeType, onCreateOption, onUpdateOption, onDeleteOption,
   relationTargets, onRelationTargetChange,
 }: SortableRowProps) {
-  const {
-    attributes, listeners, setNodeRef, transform, transition, isDragging,
-  } = useSortable({ id: definition.id, disabled: readOnly });
-
-  const style = {
-    transform: DndCSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-    zIndex: isDragging ? 10 : undefined,
-  };
-
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: definition.id, disabled: readOnly });
+  const style = { transform: DndCSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, zIndex: isDragging ? 10 : undefined };
   const renameRef = useRef<HTMLInputElement>(null);
   const isRenaming = renamingId === definition.id;
   const Icon = PROPERTY_ICONS[definition.type];
@@ -144,18 +128,11 @@ function SortablePropertyRow({
     <div ref={setNodeRef} style={style} className="npc-property-row">
       <div className="npc-property-label">
         {!readOnly && (
-          <button
-            type="button"
-            className="npc-prop-drag-handle-btn"
-            {...attributes}
-            {...listeners}
-            aria-label="Reordenar"
-          >
+          <button type="button" className="npc-prop-drag-handle-btn" {...attributes} {...listeners} aria-label="Reordenar">
             <GripVertical size={13} />
           </button>
         )}
         <Icon size={14} className="npc-property-icon" strokeWidth={1.75} />
-
         {isRenaming ? (
           <input
             ref={renameRef}
@@ -177,24 +154,17 @@ function SortablePropertyRow({
             {definition.name}
           </span>
         )}
-
         {!readOnly && !isRenaming && (
-          <Popover
-            align="left"
-            trigger={({ toggle }) => (
-              <button type="button" className="npc-prop-action-btn" onClick={toggle}>
-                <MoreHorizontal size={13} />
-              </button>
-            )}
-          >
+          <Popover align="left" trigger={({ toggle }) => (
+            <button type="button" className="npc-prop-action-btn" onClick={toggle}>
+              <MoreHorizontal size={13} />
+            </button>
+          )}>
             {({ close }) => (
               <div className="npc-prop-actions-menu">
-                <button type="button" className="npc-block-menu-item" onClick={() => {
-                  onStartRename(definition.id, definition.name); close();
-                }}>
+                <button type="button" className="npc-block-menu-item" onClick={() => { onStartRename(definition.id, definition.name); close(); }}>
                   <Edit3 size={13} />Renomear
                 </button>
-
                 {changeableTypes.length > 0 && (
                   <>
                     <div className="npc-block-menu-sep" />
@@ -202,8 +172,7 @@ function SortablePropertyRow({
                     {changeableTypes.map((t) => {
                       const TIcon = PROPERTY_ICONS[t];
                       return (
-                        <button key={t} type="button" className="npc-block-menu-item"
-                          onClick={() => { onChangeType(definition.id, t); close(); }}>
+                        <button key={t} type="button" className="npc-block-menu-item" onClick={() => { onChangeType(definition.id, t); close(); }}>
                           <TIcon size={13} />{PROPERTY_TYPE_LABELS[t]}
                           <ArrowRight size={12} className="npc-menu-arrow" />
                         </button>
@@ -211,10 +180,8 @@ function SortablePropertyRow({
                     })}
                   </>
                 )}
-
                 <div className="npc-block-menu-sep" />
-                <button type="button" className="npc-block-menu-item npc-block-menu-item-danger"
-                  onClick={() => { onDelete(definition.id); close(); }}>
+                <button type="button" className="npc-block-menu-item npc-block-menu-item-danger" onClick={() => { onDelete(definition.id); close(); }}>
                   <Trash2 size={13} />Deletar propriedade
                 </button>
               </div>
@@ -225,8 +192,12 @@ function SortablePropertyRow({
 
       <div className="npc-property-value-cell">
         {definition.type === 'relation' && !readOnly && relationTargets.length > 0 ? (
-          <select className="npc-relation-target" aria-label="Base relacionada" value={definition.targetDataSourceId}
-            onChange={(event) => onRelationTargetChange(definition.id, event.target.value)}>
+          <select
+            className="npc-relation-target"
+            aria-label="Base relacionada"
+            value={definition.targetDataSourceId}
+            onChange={(event) => onRelationTargetChange(definition.id, event.target.value)}
+          >
             {relationTargets.map((target) => <option key={target.id} value={target.id}>{target.title}</option>)}
           </select>
         ) : null}
@@ -247,50 +218,20 @@ function SortablePropertyRow({
   );
 }
 
-// ─── Main panel ────────────────────────────────────────────────
 export function PropertiesPanel({
   schema, properties, locale, onChange, onSchemaChange,
-  boardOptions = [], boardPlacement, onBoardPlacementChange,
   relationTargets = [], layout, onLayoutChange,
 }: PropertiesPanelProps) {
   const [showHidden, setShowHidden] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
-  const [editingBoardLink, setEditingBoardLink] = useState(false);
-  const [draftBoardId, setDraftBoardId] = useState(boardPlacement?.boardId ?? boardOptions[0]?.id ?? '');
-  const [draftLaneId, setDraftLaneId] = useState(boardPlacement?.laneId ?? '');
   const readOnly = !onSchemaChange;
-  const canManageBoardLink = Boolean(onBoardPlacementChange && boardOptions.length);
-  const placementBoard = boardOptions.find((board) => board.id === boardPlacement?.boardId);
-  const placementLane = placementBoard?.lanes.find((lane) => lane.id === boardPlacement?.laneId);
-  const draftBoard = boardOptions.find((board) => board.id === draftBoardId);
   const availablePeople = schema.properties.flatMap((property) => property.type === 'person' ? property.people : [])
     .filter((person, index, all) => all.findIndex((candidate) => candidate.id === person.id) === index);
-
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-
-  function openBoardLinkEditor() {
-    const boardId = boardPlacement?.boardId ?? boardOptions[0]?.id ?? '';
-    const board = boardOptions.find((candidate) => candidate.id === boardId);
-    setDraftBoardId(boardId);
-    setDraftLaneId(boardPlacement?.laneId ?? board?.lanes[0]?.id ?? '');
-    setEditingBoardLink(true);
-  }
-
-  function changeDraftBoard(boardId: string) {
-    const board = boardOptions.find((candidate) => candidate.id === boardId);
-    setDraftBoardId(boardId);
-    setDraftLaneId(board?.lanes[0]?.id ?? '');
-  }
-
-  function applyBoardLink() {
-    if (!onBoardPlacementChange || !draftBoardId || !draftLaneId) return;
-    onBoardPlacementChange({ boardId: draftBoardId, laneId: draftLaneId });
-    setEditingBoardLink(false);
-  }
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -321,12 +262,7 @@ export function PropertiesPanel({
 
   function finishRename(id: string) {
     if (!renameDraft.trim() || !onSchemaChange) return;
-    onSchemaChange({
-      ...schema,
-      properties: schema.properties.map((p) =>
-        p.id === id ? { ...p, name: renameDraft.trim() } : p,
-      ),
-    });
+    onSchemaChange({ ...schema, properties: schema.properties.map((p) => p.id === id ? { ...p, name: renameDraft.trim() } : p) });
     setRenamingId(null);
   }
 
@@ -364,15 +300,9 @@ export function PropertiesPanel({
         if (p.id !== propId) return p;
         if (p.type === 'status') {
           const [firstGroup, ...rest] = p.groups;
-          return {
-            ...p,
-            options: [...p.options, option],
-            groups: firstGroup ? [{ ...firstGroup, optionIds: [...firstGroup.optionIds, option.id] }, ...rest] : p.groups,
-          };
+          return { ...p, options: [...p.options, option], groups: firstGroup ? [{ ...firstGroup, optionIds: [...firstGroup.optionIds, option.id] }, ...rest] : p.groups };
         }
-        if (p.type === 'select' || p.type === 'multi_select') {
-          return { ...p, options: [...p.options, option] };
-        }
+        if (p.type === 'select' || p.type === 'multi_select') return { ...p, options: [...p.options, option] };
         return p;
       }),
     });
@@ -384,9 +314,7 @@ export function PropertiesPanel({
       ...schema,
       properties: schema.properties.map((p) => {
         if (p.id !== propId) return p;
-        if (p.type === 'select' || p.type === 'multi_select' || p.type === 'status') {
-          return { ...p, options: p.options.map((o) => (o.id === option.id ? option : o)) };
-        }
+        if (p.type === 'select' || p.type === 'multi_select' || p.type === 'status') return { ...p, options: p.options.map((o) => (o.id === option.id ? option : o)) };
         return p;
       }),
     });
@@ -402,15 +330,10 @@ export function PropertiesPanel({
           return {
             ...property,
             options: property.options.filter((option) => option.id !== optionId),
-            groups: property.groups.map((group) => ({
-              ...group,
-              optionIds: group.optionIds.filter((id) => id !== optionId),
-            })),
+            groups: property.groups.map((group) => ({ ...group, optionIds: group.optionIds.filter((id) => id !== optionId) })),
           };
         }
-        if (property.type === 'select' || property.type === 'multi_select') {
-          return { ...property, options: property.options.filter((option) => option.id !== optionId) };
-        }
+        if (property.type === 'select' || property.type === 'multi_select') return { ...property, options: property.options.filter((option) => option.id !== optionId) };
         return property;
       }),
     });
@@ -427,16 +350,8 @@ export function PropertiesPanel({
     onChange?.(propertyId, []);
   }
 
-  const visibleProps = schema.properties.filter((p) => {
-    if (ALWAYS_SHOW_TYPES.includes(p.type)) return true;
-    return showHidden || !isEmptyValue(properties[p.id]);
-  });
-
-  const emptyPropertyCount = schema.properties.filter((p) => {
-    if (ALWAYS_SHOW_TYPES.includes(p.type)) return false;
-    return isEmptyValue(properties[p.id]);
-  }).length;
-
+  const visibleProps = schema.properties.filter((p) => ALWAYS_SHOW_TYPES.includes(p.type) || showHidden || !isEmptyValue(properties[p.id]));
+  const emptyPropertyCount = schema.properties.filter((p) => !ALWAYS_SHOW_TYPES.includes(p.type) && isEmptyValue(properties[p.id])).length;
   const sortableIds = visibleProps.map((p) => p.id);
 
   function renderProperty(definition: PropertyDefinition) {
@@ -449,7 +364,6 @@ export function PropertiesPanel({
       renameDraft={renameDraft}
       readOnly={readOnly}
       onChange={onChange}
-      onSchemaChange={onSchemaChange}
       onStartRename={(id, name) => { setRenamingId(id); setRenameDraft(name); }}
       onFinishRename={finishRename}
       onCancelRename={() => setRenamingId(null)}
@@ -466,10 +380,7 @@ export function PropertiesPanel({
 
   const visibleById = new Map(visibleProps.map((definition) => [definition.id, definition]));
   const pinned = layout?.pinnedPropertyIds.flatMap((id) => visibleById.get(id) ?? []) ?? [];
-  const sections = layout?.sections.map((section) => ({
-    ...section,
-    properties: section.propertyIds.flatMap((id) => visibleById.get(id) ?? []),
-  })) ?? [];
+  const sections = layout?.sections.map((section) => ({ ...section, properties: section.propertyIds.flatMap((id) => visibleById.get(id) ?? []) })) ?? [];
 
   return (
     <div className="npc-properties-panel">
@@ -484,84 +395,30 @@ export function PropertiesPanel({
 
       {layout && onLayoutChange ? <PageLayoutSettings schema={schema} layout={layout} onChange={onLayoutChange} /> : null}
 
-      {(boardPlacement || editingBoardLink) && canManageBoardLink ? (
-        <div className="npc-board-link-row">
-          <div className="npc-board-link-label"><LayoutDashboard size={14} /><span>Board</span></div>
-          {editingBoardLink ? (
-            <div className="npc-board-link-editor">
-              <label>
-                <span>Board</span>
-                <select value={draftBoardId} onChange={(event) => changeDraftBoard(event.target.value)}>
-                  {boardOptions.map((board) => <option key={board.id} value={board.id}>{board.title}</option>)}
-                </select>
-              </label>
-              <label>
-                <span>Lane</span>
-                <select value={draftLaneId} onChange={(event) => setDraftLaneId(event.target.value)}>
-                  {draftBoard?.lanes.map((lane) => <option key={lane.id} value={lane.id}>{lane.name}</option>)}
-                </select>
-              </label>
-              <div className="npc-board-link-actions">
-                <button type="button" onClick={() => { setEditingBoardLink(false); if (!boardPlacement) setDraftBoardId(''); }}>Cancelar</button>
-                <button type="button" className="is-primary" disabled={!draftBoardId || !draftLaneId} onClick={applyBoardLink}>Aplicar</button>
-              </div>
-            </div>
-          ) : (
-            <div className="npc-board-link-value">
-              <button type="button" onClick={openBoardLinkEditor}>
-                <strong>{placementBoard?.title ?? 'Board'}</strong>
-                <span>/</span>
-                <em>{placementLane?.name ?? 'Sem status'}</em>
-              </button>
-              <button type="button" className="npc-board-link-remove" title="Remover do board" onClick={() => onBoardPlacementChange?.(null)}><X size={13} /></button>
-            </div>
-          )}
-        </div>
-      ) : null}
-
       {emptyPropertyCount > 0 && (
-        <button type="button" className="npc-hidden-props-toggle"
-          onClick={() => setShowHidden((v) => !v)}>
+        <button type="button" className="npc-hidden-props-toggle" onClick={() => setShowHidden((v) => !v)}>
           {showHidden ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          {showHidden
-            ? 'Ocultar propriedades vazias'
-            : `${emptyPropertyCount} propriedade${emptyPropertyCount !== 1 ? 's' : ''} oculta${emptyPropertyCount !== 1 ? 's' : ''}`}
+          {showHidden ? 'Ocultar propriedades vazias' : `${emptyPropertyCount} propriedade${emptyPropertyCount !== 1 ? 's' : ''} oculta${emptyPropertyCount !== 1 ? 's' : ''}`}
         </button>
       )}
 
-      {(!readOnly || canManageBoardLink) && (
-        <Popover
-          align="left"
-          trigger={({ toggle }) => (
-            <button type="button" className="npc-add-property-btn" onClick={toggle}>
-              <Plus size={13} />Adicionar propriedade
-            </button>
-          )}
-        >
+      {!readOnly && (
+        <Popover align="left" trigger={({ toggle }) => (
+          <button type="button" className="npc-add-property-btn" onClick={toggle}>
+            <Plus size={13} />Adicionar propriedade
+          </button>
+        )}>
           {({ close }) => (
             <div className="npc-type-picker">
-              {!readOnly ? (
-                <>
-                  <div className="npc-type-picker-label">TIPO DE PROPRIEDADE</div>
-                  {ADDABLE_TYPES.map((type) => {
-                    const Icon = PROPERTY_ICONS[type];
-                    return (
-                      <button key={type} type="button" className="npc-type-picker-item"
-                        onClick={() => { addProperty(type); close(); }}>
-                        <Icon size={14} strokeWidth={1.75} />{PROPERTY_TYPE_LABELS[type]}
-                      </button>
-                    );
-                  })}
-                </>
-              ) : null}
-              {canManageBoardLink ? (
-                <>
-                  <div className="npc-type-picker-label npc-type-picker-section">VINCULOS</div>
-                  <button type="button" className="npc-type-picker-item" onClick={() => { openBoardLinkEditor(); close(); }}>
-                    <LayoutDashboard size={14} strokeWidth={1.75} />Board
+              <div className="npc-type-picker-label">TIPO DE PROPRIEDADE</div>
+              {ADDABLE_TYPES.map((type) => {
+                const Icon = PROPERTY_ICONS[type];
+                return (
+                  <button key={type} type="button" className="npc-type-picker-item" onClick={() => { addProperty(type); close(); }}>
+                    <Icon size={14} strokeWidth={1.75} />{PROPERTY_TYPE_LABELS[type]}
                   </button>
-                </>
-              ) : null}
+                );
+              })}
             </div>
           )}
         </Popover>
