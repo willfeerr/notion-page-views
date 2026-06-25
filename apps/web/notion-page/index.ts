@@ -70,3 +70,4 @@ export type { SerializedToggleHeadingNode } from './editor/nodes/ToggleHeadingNo
 // CSS
 import './katex-import.css';
 import './notion-page.css';
+import './notion-page-fixes.css';
