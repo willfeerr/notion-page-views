@@ -75,7 +75,8 @@ export function PropertyField({
         multiple={definition.multiple} onChange={(v) => onChange?.(v)} />;
     case 'relation':
       return <RelationField options={relationOptions} value={value as string[] | null | undefined}
-        compact={compact} multiple={definition.multiple} onChange={onChange ? (next) => onChange(next) : undefined} />;
+        compact={compact} multiple={definition.cardinality === 'one' ? false : definition.multiple}
+        onChange={onChange ? (next) => onChange(next) : undefined} />;
     case 'files':
       return <FilesField value={value as string[] | null | undefined} compact={compact} onChange={onChange ? (next) => onChange(next) : undefined} />;
     case 'unique_id':
