@@ -54,7 +54,35 @@ export function BlockMenuPlugin({ anchorElem }: BlockMenuProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
   useClickOutside(popoverRef, () => setMenuOpen(false), menuOpen);
 
-  function openMenu(e: React.MouseEvent, nodeKey: string) {
+  function resolveNodeKeyFromPoint(clientX: number, clientY: number): string | null {
+    const elementAtPoint = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+    const elementKey = elementAtPoint?.closest('[data-lexical-node-key]')?.getAttribute('data-lexical-node-key');
+    if (elementKey) return elementKey;
+
+    let resolvedKey: string | null = null;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    editor.getEditorState().read(() => {
+      for (const child of $getRoot().getChildren()) {
+        const domEl = editor.getElementByKey(child.getKey());
+        if (!domEl) continue;
+        const rect = domEl.getBoundingClientRect();
+        if (clientY >= rect.top - 6 && clientY <= rect.bottom + 6) {
+          resolvedKey = child.getKey();
+          closestDistance = 0;
+          break;
+        }
+        const distance = Math.abs(clientY - (rect.top + rect.height / 2));
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          resolvedKey = child.getKey();
+        }
+      }
+    });
+    return resolvedKey;
+  }
+
+  function openMenu(e: React.MouseEvent, nodeKey: string | null) {
+    if (!nodeKey) return;
     e.preventDefault();
     e.stopPropagation();
     setActiveNodeKey(nodeKey);
@@ -100,26 +128,7 @@ export function BlockMenuPlugin({ anchorElem }: BlockMenuProps) {
         type="button"
         className="npc-block-menu-btn"
         title="Ações do bloco"
-        onClick={(e) => {
-          // get closest block node key from DOM
-          const el = menuRef.current?.closest('[data-lexical-node-key]') as HTMLElement | null;
-          const key = el?.dataset.lexicalNodeKey ?? null;
-          // fallback: iterate root children to find matching DOM element
-          let resolvedKey = key;
-          if (!resolvedKey) {
-            editor.getEditorState().read(() => {
-              const root = $getRoot();
-              for (const child of root.getChildren()) {
-                const domEl = editor.getElementByKey(child.getKey());
-                if (domEl && domEl.contains(menuRef.current)) {
-                  resolvedKey = child.getKey();
-                  break;
-                }
-              }
-            });
-          }
-          openMenu(e, resolvedKey ?? '');
-        }}
+        onClick={(e) => openMenu(e, resolveNodeKeyFromPoint(e.clientX + 42, e.clientY))}
       >
         <MoreHorizontal size={14} />
       </button>
