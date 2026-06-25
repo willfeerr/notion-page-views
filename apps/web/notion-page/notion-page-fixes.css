@@ -4,16 +4,8 @@
   order: 1;
 }
 
-.npc-properties-panel > .npc-popover-wrapper:has(.npc-layout-trigger) {
-  order: 2;
-}
-
 .npc-properties-panel > .npc-hidden-props-toggle {
   order: 3;
-}
-
-.npc-properties-panel > .npc-popover-wrapper:has(.npc-add-property-btn) {
-  order: 4;
 }
 
 .npc-board-link-row {
