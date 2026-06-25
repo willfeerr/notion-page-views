@@ -16,6 +16,5 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", "notion-page", "vite.config.ts"],
-  "exclude": ["src/**/*.test.ts"]
+  "include": ["src", "notion-page", "vite.config.ts"]
 }
