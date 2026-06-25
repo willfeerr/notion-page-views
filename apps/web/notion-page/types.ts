@@ -17,6 +17,8 @@ export type PropertyType =
   | 'formula' | 'rollup'
   | 'created_time' | 'last_edited_time';
 
+export type RelationCardinality = 'one' | 'many';
+
 interface PropertyDefinitionBase { id: string; name: string; type: PropertyType; description?: string; }
 export interface TextPropertyDefinition extends PropertyDefinitionBase { type: 'text'; }
 export interface NumberPropertyDefinition extends PropertyDefinitionBase {
@@ -33,7 +35,14 @@ export interface EmailPropertyDefinition extends PropertyDefinitionBase { type: 
 export interface PhonePropertyDefinition extends PropertyDefinitionBase { type: 'phone'; }
 export interface CreatedTimePropertyDefinition extends PropertyDefinitionBase { type: 'created_time'; }
 export interface LastEditedTimePropertyDefinition extends PropertyDefinitionBase { type: 'last_edited_time'; }
-export interface RelationPropertyDefinition extends PropertyDefinitionBase { type: 'relation'; targetDataSourceId: string; multiple?: boolean; }
+export interface RelationPropertyDefinition extends PropertyDefinitionBase {
+  type: 'relation';
+  targetDataSourceId: string;
+  /** Preferred relation cardinality. `multiple` is kept for backwards compatibility with older snapshots. */
+  cardinality?: RelationCardinality;
+  multiple?: boolean;
+  inversePropertyId?: string;
+}
 export interface FilesPropertyDefinition extends PropertyDefinitionBase { type: 'files'; }
 export interface UniqueIdPropertyDefinition extends PropertyDefinitionBase { type: 'unique_id'; prefix?: string; }
 export interface CreatedByPropertyDefinition extends PropertyDefinitionBase { type: 'created_by'; }
