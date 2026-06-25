@@ -1,0 +1,150 @@
+/* Targeted fixes for page property composition and document block handles. */
+
+.npc-properties-panel > .npc-board-link-row {
+  order: 1;
+}
+
+.npc-properties-panel > .npc-popover-wrapper:has(.npc-layout-trigger) {
+  order: 2;
+}
+
+.npc-properties-panel > .npc-hidden-props-toggle {
+  order: 3;
+}
+
+.npc-properties-panel > .npc-popover-wrapper:has(.npc-add-property-btn) {
+  order: 4;
+}
+
+.npc-board-link-row {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 3px 4px;
+  margin: 0;
+  border-radius: var(--npc-radius);
+}
+
+.npc-board-link-label {
+  width: 160px;
+  flex: 0 0 160px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 6px 5px 2px;
+  color: var(--npc-text-secondary);
+  font-size: 13.5px;
+}
+
+.npc-board-link-value {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+}
+
+.npc-board-link-value > button:first-child {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+}
+
+.npc-board-link-editor {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+}
+
+.npc-property-value-cell:has(.npc-relation-target) {
+  gap: 6px;
+}
+
+.npc-relation-target {
+  order: 2;
+  flex: 0 1 150px;
+  margin-left: auto;
+  height: 26px;
+  min-width: 92px;
+  max-width: 150px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--npc-text-secondary);
+  font: 500 11px/1 var(--npc-font);
+  opacity: .72;
+}
+
+.npc-relation-target:hover,
+.npc-relation-target:focus {
+  background: var(--npc-hover-bg);
+  color: var(--npc-text-primary);
+  opacity: 1;
+  outline: none;
+}
+
+.npc-drag-handle {
+  padding: 2px 4px;
+  margin-left: -6px;
+  border-radius: 6px;
+}
+
+.npc-drag-handle::before {
+  content: '';
+  position: absolute;
+  inset: -8px -22px -8px -10px;
+  border-radius: 8px;
+}
+
+.npc-editor-container:hover .npc-drag-handle,
+.npc-drag-handle:hover,
+.npc-drag-handle:focus-within {
+  opacity: .85 !important;
+}
+
+.npc-drag-handle:hover,
+.npc-drag-handle:focus-within {
+  background: var(--npc-hover-bg);
+}
+
+.npc-drag-grip,
+.npc-block-menu-btn {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 640px) {
+  .npc-board-link-row {
+    display: grid;
+    grid-template-columns: minmax(0, 40%) minmax(0, 60%);
+    align-items: center;
+    min-height: 40px;
+  }
+
+  .npc-board-link-label {
+    width: auto;
+    min-width: 0;
+    flex-basis: auto;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .npc-board-link-value {
+    min-width: 0;
+    padding: 1px 4px;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .npc-board-link-editor {
+    grid-template-columns: 1fr;
+    padding: 1px 4px;
+  }
+
+  .npc-relation-target {
+    display: none;
+  }
+}
