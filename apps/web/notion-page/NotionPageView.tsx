@@ -20,6 +20,10 @@ interface NotionPageViewProps {
   onPropertyChange?: (propertyId: string, value: StoredPropertyValue) => void;
   onContentChange?: (content: SerializedEditorState) => void;
   onSchemaChange?: (schema: NotionSchema) => void;
+  /** Deprecated: board membership is rendered only through normal relation properties. */
+  boardOptions?: unknown;
+  boardPlacement?: unknown;
+  onBoardPlacementChange?: unknown;
   relationTargets?: RelationTargetOption[];
   layout?: DatabasePageLayout;
   onLayoutChange?: (layout: DatabasePageLayout) => void;
