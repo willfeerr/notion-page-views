@@ -18,16 +18,21 @@
 
 .npc-board-link-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   min-height: 32px;
   padding: 3px 4px;
   margin: 0;
   border-radius: var(--npc-radius);
 }
 
+.npc-board-link-row:hover {
+  background: var(--npc-hover);
+}
+
 .npc-board-link-label {
   width: 160px;
   flex: 0 0 160px;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -36,27 +41,150 @@
   font-size: 13.5px;
 }
 
+.npc-board-link-label svg {
+  flex-shrink: 0;
+  opacity: .85;
+}
+
+.npc-board-link-label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .npc-board-link-value {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   padding: 2px 6px;
 }
 
 .npc-board-link-value > button:first-child {
   min-width: 0;
+  max-width: 100%;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   padding: 4px 6px;
+  border: 0;
+  border-radius: var(--npc-radius);
+  background: transparent;
+  color: var(--npc-text);
+  font-family: var(--npc-font);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.npc-board-link-value > button:first-child:hover {
+  background: var(--npc-hover);
+}
+
+.npc-board-link-value strong,
+.npc-board-link-value em,
+.npc-board-link-value span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+  color: inherit;
+}
+
+.npc-board-link-value strong {
+  font-weight: 500;
+}
+
+.npc-board-link-value em {
+  color: var(--npc-text-secondary);
+  font-style: normal;
+}
+
+.npc-board-link-remove {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--npc-radius);
+  background: transparent;
+  color: var(--npc-text-secondary);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.npc-board-link-row:hover .npc-board-link-remove,
+.npc-board-link-remove:focus-visible {
+  opacity: 1;
+}
+
+.npc-board-link-remove:hover {
+  background: var(--npc-hover);
+  color: var(--npc-text);
 }
 
 .npc-board-link-editor {
   flex: 1;
   min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 6px;
   padding: 2px 6px;
+}
+
+.npc-board-link-editor label {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  color: var(--npc-text-secondary);
+  font-size: 10px;
+}
+
+.npc-board-link-editor select {
+  min-width: 0;
+  height: 28px;
+  border: 0;
+  border-radius: var(--npc-radius);
+  background: transparent;
+  color: var(--npc-text);
+  font: 400 13px/1 var(--npc-font);
+}
+
+.npc-board-link-editor select:hover,
+.npc-board-link-editor select:focus {
+  background: var(--npc-hover);
+  outline: none;
+}
+
+.npc-board-link-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.npc-board-link-actions button {
+  height: 28px;
+  border: 0;
+  border-radius: var(--npc-radius);
+  background: transparent;
+  color: var(--npc-text-secondary);
+  font: 500 12px/1 var(--npc-font);
+  padding: 0 8px;
+}
+
+.npc-board-link-actions button:hover {
+  background: var(--npc-hover);
+  color: var(--npc-text);
+}
+
+.npc-board-link-actions button.is-primary {
+  color: var(--npc-accent);
 }
 
 .npc-property-value-cell:has(.npc-relation-target) {
@@ -119,25 +247,36 @@
 
 @media (max-width: 640px) {
   .npc-board-link-row {
-    display: grid;
-    grid-template-columns: minmax(0, 40%) minmax(0, 60%);
-    align-items: center;
-    min-height: 40px;
+    display: flex;
+    align-items: flex-start;
+    min-height: 32px;
+    padding: 3px 4px;
   }
 
   .npc-board-link-label {
-    width: auto;
-    min-width: 0;
-    flex-basis: auto;
+    width: 40%;
+    flex: 0 0 40%;
     overflow: hidden;
     white-space: nowrap;
   }
 
   .npc-board-link-value {
     min-width: 0;
-    padding: 1px 4px;
+    padding: 2px 4px;
     overflow: hidden;
-    white-space: nowrap;
+  }
+
+  .npc-board-link-value > button:first-child {
+    flex: 1 1 auto;
+    padding: 4px 5px;
+  }
+
+  .npc-board-link-value span[aria-hidden='true'] {
+    display: none;
+  }
+
+  .npc-board-link-remove {
+    opacity: 1;
   }
 
   .npc-board-link-editor {
