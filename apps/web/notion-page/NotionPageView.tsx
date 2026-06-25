@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { SerializedEditorState } from 'lexical';
-import type { BoardLinkOption, BoardLinkValue, CollabConfig, DatabasePageLayout, NotionPageData, NotionSchema, PersonOption, RelationTargetOption, StoredPropertyValue } from './types';
+import type { CollabConfig, DatabasePageLayout, NotionPageData, NotionSchema, PersonOption, RelationTargetOption, StoredPropertyValue } from './types';
 import { PageHeader } from './PageHeader';
 import { PropertiesPanel } from './PropertiesPanel';
 import { NotionEditor } from './editor/NotionEditor';
@@ -20,9 +20,6 @@ interface NotionPageViewProps {
   onPropertyChange?: (propertyId: string, value: StoredPropertyValue) => void;
   onContentChange?: (content: SerializedEditorState) => void;
   onSchemaChange?: (schema: NotionSchema) => void;
-  boardOptions?: BoardLinkOption[];
-  boardPlacement?: BoardLinkValue | null;
-  onBoardPlacementChange?: (placement: BoardLinkValue | null) => void;
   relationTargets?: RelationTargetOption[];
   layout?: DatabasePageLayout;
   onLayoutChange?: (layout: DatabasePageLayout) => void;
@@ -46,7 +43,6 @@ export function NotionPageView({
   schema, page, locale, collab,
   onTitleChange, onIconChange, onCoverChange, onCoverPositionChange,
   onPropertyChange, onContentChange, onSchemaChange,
-  boardOptions, boardPlacement, onBoardPlacementChange,
   relationTargets,
   layout, onLayoutChange,
   onEditingLocationChange,
@@ -77,32 +73,16 @@ export function NotionPageView({
         onCoverPositionChange={onCoverPositionChange}
       />
 
-      {/* Page-level controls — full-width, small font, TOC */}
       <div className="npc-page-controls">
-        <button
-          type="button"
-          className={`npc-page-ctrl-btn ${fullWidth ? 'is-active' : ''}`}
-          title="Largura total"
-          onClick={() => setFullWidth((v) => !v)}
-        >
+        <button type="button" className={`npc-page-ctrl-btn ${fullWidth ? 'is-active' : ''}`} title="Largura total" onClick={() => setFullWidth((v) => !v)}>
           <AlignLeft size={13} />
           <span>Largura total</span>
         </button>
-        <button
-          type="button"
-          className={`npc-page-ctrl-btn ${smallFont ? 'is-active' : ''}`}
-          title="Fonte pequena"
-          onClick={() => setSmallFont((v) => !v)}
-        >
+        <button type="button" className={`npc-page-ctrl-btn ${smallFont ? 'is-active' : ''}`} title="Fonte pequena" onClick={() => setSmallFont((v) => !v)}>
           <ZoomIn size={13} />
           <span>Fonte pequena</span>
         </button>
-        <button
-          type="button"
-          className={`npc-page-ctrl-btn ${showToc ? 'is-active' : ''}`}
-          title="Índice"
-          onClick={() => setShowToc((v) => !v)}
-        >
+        <button type="button" className={`npc-page-ctrl-btn ${showToc ? 'is-active' : ''}`} title="Índice" onClick={() => setShowToc((v) => !v)}>
           <BookOpen size={13} />
           <span>Índice</span>
         </button>
@@ -115,9 +95,6 @@ export function NotionPageView({
           locale={locale}
           onChange={onPropertyChange}
           onSchemaChange={onSchemaChange}
-          boardOptions={boardOptions}
-          boardPlacement={boardPlacement}
-          onBoardPlacementChange={onBoardPlacementChange}
           relationTargets={relationTargets}
           layout={layout}
           onLayoutChange={onLayoutChange}
