@@ -70,13 +70,11 @@ stored as user-editable values.
 
 Standalone pages have no database properties. They must be moved into a database before receiving Status, Date, Person or other database fields.
 
-A Relation definition stores its `targetDataSourceId`; row values contain only referenced page IDs. Updating a
-relation filters IDs against canonical target ownership and never changes either page's ownership. Deleting a
-target page removes its ID from relation values in every loaded data source.
+A Relation definition stores its `targetDataSourceId`, optional `cardinality` and optional `inversePropertyId`; row values contain only referenced page IDs. Updating a relation filters IDs against canonical target ownership and never changes either page's ownership. Deleting a target page removes its ID from relation values in every loaded data source.
 
-Board placement is limited to views on the page's current data source. Cross-source transfer is exposed as the
-separate `Mover para...` command, which previews every direct conversion and archived property before creating
-the journal operation. The last completed move can be undone from the page toolbar.
+Inverse relations are materialized during read as a projection. The inverse side can feed formulas and rollups, but the derived edge is not stored as a second membership copy.
+
+Board membership inside a database page is represented as a normal Relation property pointing to the board/data-source target. A board itself remains a view; selecting a board through Relation does not move the page, clone rows or create a move operation. Cross-source transfer remains a separate move command with conversion preview and durable journal phases.
 
 Selecting a different board grouping property changes only the view configuration. Rows without a valid value render in the synthetic `Sem status` lane; the application does not silently rewrite them.
 
