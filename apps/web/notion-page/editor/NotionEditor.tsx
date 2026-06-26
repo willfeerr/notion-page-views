@@ -33,7 +33,7 @@ import { TableOfContentsPlugin } from './TableOfContentsPlugin';
 import { CollabPlugin } from './CollabPlugin';
 import type { CollabConfig, PersonOption } from '../types';
 import { MentionPlugin } from './MentionPlugin';
-import { SerializedStateSyncPlugin } from './SerializedStateSyncPlugin';
+import { SerializedStateSyncPlugin, hasSerializedEditorContent } from './SerializedStateSyncPlugin';
 import { LocalCursorLabelPlugin } from './LocalCursorLabelPlugin';
 import { WorkspaceComponentPlugin } from './WorkspaceComponentPlugin';
 import { getBlockIdentityIndex, withStableBlockIds } from './blockIdentity';
@@ -80,9 +80,11 @@ export function NotionEditor({
   const [containerElem, setContainerElem] = useState<HTMLDivElement | null>(null);
   const changeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const blockIndexRef = useRef(getBlockIdentityIndex(initialContent));
+  const skippedInitialEmptyCollabChangeRef = useRef(false);
 
   useEffect(() => {
     blockIndexRef.current = getBlockIdentityIndex(initialContent);
+    skippedInitialEmptyCollabChangeRef.current = false;
   }, [initialContent]);
 
   const initialConfig: InitialConfigType = {
@@ -99,12 +101,24 @@ export function NotionEditor({
       if (changeTimer.current) clearTimeout(changeTimer.current);
       const snapshot = withStableBlockIds(editorState.toJSON(), { previous: blockIndexRef.current });
       blockIndexRef.current = snapshot.blockIndex;
+
+      if (
+        collab
+        && hasSerializedEditorContent(initialContent)
+        && !skippedInitialEmptyCollabChangeRef.current
+        && !hasSerializedEditorContent(snapshot)
+      ) {
+        skippedInitialEmptyCollabChangeRef.current = true;
+        return;
+      }
+      skippedInitialEmptyCollabChangeRef.current = true;
+
       changeTimer.current = setTimeout(() => {
         changeTimer.current = null;
         onChange?.(snapshot);
       }, 200);
     },
-    [onChange],
+    [collab, initialContent, onChange],
   );
 
   useEffect(() => () => {
@@ -156,7 +170,11 @@ export function NotionEditor({
 
           {/* Collab OR local */}
           {collab ? (
-            <><CollabPlugin {...collab} initialContent={initialContent} /><LocalCursorLabelPlugin user={collab.user} /></>
+            <>
+              <CollabPlugin {...collab} initialContent={initialContent} />
+              <SerializedStateSyncPlugin value={initialContent} mode="hydrate-empty-once" />
+              <LocalCursorLabelPlugin user={collab.user} />
+            </>
           ) : (
             <>
               <HistoryPlugin />
