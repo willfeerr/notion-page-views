@@ -36,4 +36,16 @@ describe('resolveCollabConfig', () => {
       user,
     });
   });
+
+  it('ignores unknown transport values', () => {
+    expect(resolveCollabConfig({
+      room: 'page:demo:v2',
+      user,
+      env: { VITE_COLLAB_TRANSPORT: 'websocket', VITE_HOCUSPOCUS_URL: 'https://collab.skrbe.com' },
+    })).toEqual({
+      transport: 'broadcast',
+      room: 'page:demo:v2',
+      user,
+    });
+  });
 });
