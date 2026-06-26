@@ -80,7 +80,7 @@ export function NotionEditor({
   const [containerElem, setContainerElem] = useState<HTMLDivElement | null>(null);
   const changeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const blockIndexRef = useRef(getBlockIdentityIndex(initialContent));
-  const skippedInitialEmptyCollabChangeRef = useRef(false);
+  const allowEmptyCollabPersistRef = useRef(!collab || !hasSerializedEditorContent(initialContent));
 
   useEffect(() => {
     blockIndexRef.current = getBlockIdentityIndex(initialContent);
@@ -100,17 +100,12 @@ export function NotionEditor({
       if (changeTimer.current) clearTimeout(changeTimer.current);
       const snapshot = withStableBlockIds(editorState.toJSON(), { previous: blockIndexRef.current });
       blockIndexRef.current = snapshot.blockIndex;
+      const snapshotHasContent = hasSerializedEditorContent(snapshot);
 
-      if (
-        collab
-        && hasSerializedEditorContent(initialContent)
-        && !skippedInitialEmptyCollabChangeRef.current
-        && !hasSerializedEditorContent(snapshot)
-      ) {
-        skippedInitialEmptyCollabChangeRef.current = true;
-        return;
+      if (collab && hasSerializedEditorContent(initialContent) && !allowEmptyCollabPersistRef.current) {
+        if (!snapshotHasContent) return;
+        allowEmptyCollabPersistRef.current = true;
       }
-      skippedInitialEmptyCollabChangeRef.current = true;
 
       changeTimer.current = setTimeout(() => {
         changeTimer.current = null;
