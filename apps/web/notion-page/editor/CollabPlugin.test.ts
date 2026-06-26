@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeHocuspocusUrl } from './CollabPlugin';
+import { normalizeHocuspocusUrl } from './collabUrl';
 
 describe('normalizeHocuspocusUrl', () => {
   it('converts public HTTP endpoints to websocket endpoints', () => {
