@@ -16,17 +16,10 @@ import { Doc } from 'yjs';
 import type { SerializedEditorState } from 'lexical';
 import type { CollabConfig, CollabPresence } from '../types';
 import { BroadcastProvider } from './BroadcastProvider';
+import { normalizeHocuspocusUrl } from './collabUrl';
 
 interface CollabPluginProps extends CollabConfig {
   initialContent?: SerializedEditorState | null;
-}
-
-export function normalizeHocuspocusUrl(url?: string): string {
-  const value = url?.trim() ?? '';
-  if (!value) return '';
-  if (value.startsWith('https://')) return `wss://${value.slice('https://'.length)}`;
-  if (value.startsWith('http://')) return `ws://${value.slice('http://'.length)}`;
-  return value;
 }
 
 export function CollabPlugin({ transport = 'broadcast', wsUrl, room, user, initialContent, onPresenceChange }: CollabPluginProps) {
