@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Array as YArray, Doc, Map as YMap, applyUpdate, encodeStateAsUpdate } from 'yjs';
+import { Doc, Map as YMap, applyUpdate, encodeStateAsUpdate } from 'yjs';
 import type { NotionPageData, NotionSchema } from '../notion-page/types';
 import type { WorkspaceResource } from './domain';
 import { WorkspaceYjsStore } from './workspaceYjs';
