@@ -84,7 +84,6 @@ export function NotionEditor({
 
   useEffect(() => {
     blockIndexRef.current = getBlockIdentityIndex(initialContent);
-    skippedInitialEmptyCollabChangeRef.current = false;
   }, [initialContent]);
 
   const initialConfig: InitialConfigType = {
