@@ -1,4 +1,11 @@
-import type { FormulaExpression, NotionPageData, NotionSchema, RollupPropertyDefinition, StoredPropertyValue } from '../notion-page/types';
+import type {
+  FormulaExpression,
+  NotionPageData,
+  NotionSchema,
+  RelationPropertyDefinition,
+  RollupPropertyDefinition,
+  StoredPropertyValue,
+} from '../notion-page/types';
 
 function formulaValue(expression: FormulaExpression, properties: Record<string, StoredPropertyValue>): StoredPropertyValue {
   if (expression.kind === 'literal') return expression.value;
@@ -13,6 +20,57 @@ function formulaValue(expression: FormulaExpression, properties: Record<string, 
   if (expression.operator === 'subtract') return a - b;
   if (expression.operator === 'multiply') return a * b;
   return b === 0 ? null : a / b;
+}
+
+function relationIds(value: StoredPropertyValue): string[] {
+  return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
+}
+
+function relationCardinality(definition: RelationPropertyDefinition): 'one' | 'many' {
+  return definition.cardinality ?? (definition.multiple === false ? 'one' : 'many');
+}
+
+function appendUnique(left: string[], right: string[]): string[] {
+  const seen = new Set(left);
+  return [...left, ...right.filter((id) => {
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  })];
+}
+
+function applyCardinality(definition: RelationPropertyDefinition, ids: string[]): string[] {
+  const unique = appendUnique([], ids);
+  return relationCardinality(definition) === 'one' ? unique.slice(0, 1) : unique;
+}
+
+function materializeInverseRelations(
+  pages: NotionPageData[],
+  schemas: Record<string, NotionSchema>,
+): void {
+  const byId = new Map(pages.map((page) => [page.id, page]));
+  const schemaByPageId = new Map(Object.entries(schemas));
+
+  pages.forEach((source) => {
+    const sourceRelations = schemaByPageId.get(source.id)?.properties
+      .filter((definition): definition is RelationPropertyDefinition => definition.type === 'relation' && Boolean(definition.inversePropertyId)) ?? [];
+
+    sourceRelations.forEach((sourceRelation) => {
+      relationIds(source.properties[sourceRelation.id]).forEach((targetPageId) => {
+        const target = byId.get(targetPageId);
+        const targetSchema = schemaByPageId.get(targetPageId);
+        if (!target || !targetSchema) return;
+        const inverse = targetSchema.properties.find((definition): definition is RelationPropertyDefinition => (
+          definition.type === 'relation' && definition.id === sourceRelation.inversePropertyId
+        ));
+        if (!inverse) return;
+        target.properties[inverse.id] = applyCardinality(
+          inverse,
+          appendUnique(relationIds(target.properties[inverse.id]), [source.id]),
+        );
+      });
+    });
+  });
 }
 
 function rollupValue(definition: RollupPropertyDefinition, page: NotionPageData, pages: Map<string, NotionPageData>): StoredPropertyValue {
@@ -40,6 +98,7 @@ export function materializeComputedProperties(
 ): NotionPageData[] {
   const materialized = pages.map((page) => ({ ...page, properties: { ...page.properties } }));
   const byId = new Map(materialized.map((page) => [page.id, page]));
+  materializeInverseRelations(materialized, schemas);
   materialized.forEach((page) => {
     schemas[page.id]?.properties.filter((definition) => definition.type === 'formula').forEach((definition) => {
       page.properties[definition.id] = formulaValue(definition.expression, page.properties);
