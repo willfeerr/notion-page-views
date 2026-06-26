@@ -73,11 +73,13 @@ removeExact(`              boardOptions={boardOptions.filter((board) => board.da
               onBoardPlacementChange={updateBoardPlacement}
 `, 'NotionPageView board placement props');
 
-replaceExact(
-  "              collab={{ transport: 'broadcast', room: ROOM_NAMES.page(openPage.id), user: { ...collabUser, location: editingLocation }, onPresenceChange: setPresence }}",
-  "              collab={{ ...resolveCollabConfig({ room: ROOM_NAMES.page(openPage.id), user: { ...collabUser, location: editingLocation } }), onPresenceChange: setPresence }}",
-  'NotionPageView collab config',
-);
+if (!source.includes('resolveCollabConfig({ room: ROOM_NAMES.page(openPage.id)')) {
+  replaceExact(
+    "              collab={{ transport: 'broadcast', room: ROOM_NAMES.page(openPage.id), user: { ...collabUser, location: editingLocation }, onPresenceChange: setPresence }}",
+    "              collab={{ ...resolveCollabConfig({ room: ROOM_NAMES.page(openPage.id), user: { ...collabUser, location: editingLocation } }), onPresenceChange: setPresence }}",
+    'NotionPageView collab config',
+  );
+}
 
 const forbidden = [
   'BoardLinkOption',
