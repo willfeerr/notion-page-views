@@ -53,7 +53,7 @@ describe('board DND transaction', () => {
     const moved = state.pages.find((page) => page.id === 'page-2');
 
     expect(moved?.properties.status).toBe('doing');
-    expect(board?.pageIds.toSorted()).toEqual(['page-1', 'page-2']);
+    expect([...(board?.pageIds ?? [])].sort()).toEqual(['page-1', 'page-2']);
     expect(state.ownership?.['page-2']).toMatchObject({ dataSourceId: 'roadmap' });
     expect(state.moveOperations).toEqual([]);
   });
