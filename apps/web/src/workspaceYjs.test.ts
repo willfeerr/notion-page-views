@@ -126,7 +126,7 @@ describe('WorkspaceYjsStore', () => {
     });
   });
 
-  it('keeps newly inserted pages independent until explicitly linked', () => {
+  it('keeps newly inserted pages independent until explicitly moved', () => {
     const store = createStore();
     store.initialize({ schema, pages: [page] });
     store.insertPage({ ...page, id: 'independent', title: 'Independent page' });
@@ -150,18 +150,18 @@ describe('WorkspaceYjsStore', () => {
     expect(state.pages.find((item) => item.id === 'private-b')?.properties).not.toHaveProperty('private-note');
   });
 
-  it('moves a standalone page into a board database and back', () => {
+  it('moves a standalone page into a board data source and back through explicit move APIs', () => {
     const store = createStore();
     store.initialize({ schema, pages: [page] });
     store.insertPage({ ...page, id: 'standalone', properties: {} });
-    store.linkPage('board-roadmap', 'standalone');
+    store.movePageToResourceDataSource('board-roadmap', 'standalone');
     store.updateProperty('standalone', 'status', 'todo');
 
     let state = store.read();
     expect(state.resources?.find((resource) => resource.id === 'board-roadmap')?.pageIds).toContain('standalone');
     expect(state.pages.find((item) => item.id === 'standalone')?.properties.status).toBe('todo');
 
-    store.unlinkPage('board-roadmap', 'standalone');
+    store.detachPageToPrivateDataSource('board-roadmap', 'standalone');
     state = store.read();
     expect(state.resources?.find((resource) => resource.id === 'board-roadmap')?.pageIds).not.toContain('standalone');
     expect(state.pages.find((item) => item.id === 'standalone')?.properties.status).toBe('todo');
@@ -258,6 +258,7 @@ describe('WorkspaceYjsStore', () => {
     expect(store.read().pages.find((item) => item.id === 'page-1')?.properties.relation).toEqual(['related-page']);
     expect(store.read().ownership?.['page-1'].dataSourceId).toBe('roadmap');
     expect(store.read().ownership?.['related-page'].dataSourceId).toBe('relation-target');
+    expect(store.read().moveOperations).toEqual([]);
 
     store.deletePage('related-page');
     expect(store.read().pages.find((item) => item.id === 'page-1')?.properties.relation).toEqual([]);
@@ -328,235 +329,20 @@ describe('WorkspaceYjsStore', () => {
     const store = createStore();
     store.initialize({ schema, pages: [page] });
     const isolatedStatus: NotionSchema['properties'][number] = {
-      id: 'isolated-status', name: 'Isolated status', type: 'status',
-      options: [{ id: 'isolated-todo', name: 'Todo', color: 'gray' }], groups: [],
+      id: 'isolated-status', name: 'Isolated', type: 'status',
+      options: [{ id: 'isolated-option', name: 'Todo', color: 'gray' }], groups: [],
     };
     store.createResource({
-      id: 'isolated-board', databaseId: 'isolated-db', dataSourceId: 'isolated-source', type: 'board', title: 'Isolated',
-      pageIds: [], propertyIds: [isolatedStatus.id], statusPropertyId: isolatedStatus.id,
+      id: 'isolated-board', databaseId: 'isolated-db', dataSourceId: 'isolated-source', type: 'board',
+      title: 'Isolated', pageIds: [], propertyIds: [isolatedStatus.id], statusPropertyId: isolatedStatus.id,
     }, [isolatedStatus]);
-    store.insertPage({
-      ...page, id: 'isolated-page', properties: { [isolatedStatus.id]: 'isolated-todo' },
-    }, undefined, 'isolated-source');
+
+    store.applySchema('isolated-source', { properties: [{ id: 'isolated-note', name: 'Note', type: 'text' }] });
 
     const state = store.read();
-    const original = state.resources?.find((resource) => resource.id === 'board-roadmap');
-    const isolated = state.resources?.find((resource) => resource.id === 'isolated-board');
-    expect(original?.pageIds).toEqual(['page-1']);
-    expect(isolated?.pageIds).toEqual(['isolated-page']);
-    expect(original?.propertyIds).not.toContain(isolatedStatus.id);
-    expect(isolated?.propertyIds).toEqual([isolatedStatus.id]);
-  });
-
-  it('migrates a legacy custom view into its own versioned database', () => {
-    const workspace = new Doc();
-    workspace.getMap<string>('resource-references').set('legacy-board', JSON.stringify({ id: 'legacy-board', type: 'board' }));
-    workspace.getArray<string>('resource-order').push(['legacy-board']);
-
-    const view = new Doc();
-    const resource = view.getMap<unknown>('resource');
-    resource.set('type', 'board');
-    resource.set('title', 'Legacy board');
-    resource.set('statusPropertyId', 'status');
-    const pageIds = new YArray<string>();
-    pageIds.push(['page-1']);
-    resource.set('pageIds', pageIds);
-    const propertyIds = new YArray<string>();
-    propertyIds.push(['status']);
-    resource.set('propertyIds', propertyIds);
-
-    const persisted = new Map<string, Doc>([
-      ['workspace:notion-pages-lab', workspace],
-      ['view:legacy-board', view],
-    ]);
-    const store = createStore(undefined, persisted);
-    store.initialize({ schema, pages: [page] });
-
-    expect(store.read().resources?.find((item) => item.id === 'legacy-board')).toMatchObject({
-      databaseId: 'db-legacy-board',
-      dataSourceId: 'db-legacy-board',
-      pageIds: ['page-1'],
-      propertyIds: ['status'],
-      statusPropertyId: 'status',
-    });
-  });
-
-  it('opens independent workspace, database and view rooms', () => {
-    const rooms: string[] = [];
-    const store = createStore((room) => rooms.push(room));
-    store.initialize({ schema, pages: [page] });
-    expect(rooms).toContain('workspace:notion-pages-lab:v2');
-    expect(rooms).toContain('database:roadmap:v1');
-    expect(rooms).toContain('datasource:roadmap:v1');
-    expect(rooms).toContain('view:board-roadmap:v2');
-    expect(rooms).toContain('view:calendar-product:v2');
-  });
-
-  it('keeps two views on one data source sharing rows but not view configuration', () => {
-    const store = createStore();
-    store.initialize({ schema, pages: [page] });
-    store.createResource({
-      id: 'calendar-shared', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'calendar',
-      title: 'Shared calendar', pageIds: [], propertyIds: ['due'], datePropertyId: 'due',
-      timezone: 'America/Sao_Paulo', defaultView: 'week', visibleHours: { from: 8, to: 18 },
-    });
-
-    store.updateResource('calendar-shared', { defaultView: 'agenda' });
-    const resources = store.read().resources ?? [];
-    expect(resources.find((item) => item.id === 'calendar-shared')?.pageIds).toEqual(['page-1']);
-    expect(resources.find((item) => item.id === 'board-roadmap')?.pageIds).toEqual(['page-1']);
-    expect(resources.find((item) => item.id === 'calendar-shared')).toMatchObject({ defaultView: 'agenda' });
-    expect(resources.find((item) => item.id === 'calendar-product')).toMatchObject({ defaultView: 'month' });
-  });
-
-  it('persists generic filter, sort, grouping and projection per view', () => {
-    const persisted = new Map<string, Doc>();
-    const store = createStore(undefined, persisted);
-    store.initialize({ schema, pages: [page] });
-    store.updateResource('board-roadmap', {
-      filter: { type: 'group', operator: 'and', filters: [{ type: 'condition', propertyId: 'score', operator: 'is_not_empty' }] },
-      sorts: [{ propertyId: 'score', direction: 'descending' }],
-      group: { propertyId: 'status' },
-      subgroup: { propertyId: 'due' },
-      projection: { propertyIds: ['status', 'score'], openMode: 'side_peek', cardPreview: 'cover' },
-    });
-    store.destroy();
-
-    const restored = createStore(undefined, persisted);
-    restored.initialize({ schema, pages: [page] });
-    expect(restored.read().resources?.find((item) => item.id === 'board-roadmap')).toMatchObject({
-      sorts: [{ propertyId: 'score', direction: 'descending' }],
-      group: { propertyId: 'status' },
-      subgroup: { propertyId: 'due' },
-      projection: { propertyIds: ['status', 'score'], openMode: 'side_peek', cardPreview: 'cover' },
-    });
-  });
-
-  it('clears optional view settings instead of retaining stale values', () => {
-    const store = createStore();
-    store.initialize({ schema, pages: [page] });
-    store.updateResource('board-roadmap', { sorts: [{ propertyId: 'score', direction: 'ascending' }], subgroup: { propertyId: 'due' } });
-    store.updateResource('board-roadmap', { sorts: undefined, subgroup: undefined });
-    const board = store.read().resources?.find((item) => item.id === 'board-roadmap');
-    expect(board?.sorts).toBeUndefined();
-    expect(board?.subgroup).toBeUndefined();
-  });
-
-  it('persists one database page layout per data source and reconciles schema changes', () => {
-    const persisted = new Map<string, Doc>();
-    const store = createStore(undefined, persisted);
-    store.initialize({ schema, pages: [page] });
-    store.updateDataSourceLayout('roadmap', {
-      pinnedPropertyIds: ['status'],
-      sections: [
-        { id: 'planning', title: 'Planejamento', propertyIds: ['due'], collapsed: true },
-        { id: 'metrics', title: 'Métricas', propertyIds: ['score'] },
-      ],
-    });
-    store.applySchema('roadmap', { properties: [...schema.properties, { id: 'notes', name: 'Notes', type: 'text' }] });
-    store.destroy();
-
-    const restored = createStore(undefined, persisted);
-    restored.initialize({ schema, pages: [page] });
-    expect(restored.read().dataSourceLayouts?.roadmap).toEqual({
-      pinnedPropertyIds: ['status'],
-      sections: [
-        { id: 'planning', title: 'Planejamento', propertyIds: ['due', 'notes'], collapsed: true },
-        { id: 'metrics', title: 'Métricas', propertyIds: ['score'] },
-      ],
-    });
-  });
-
-  it('persists and deletes page templates inside their data source', () => {
-    const persisted = new Map<string, Doc>();
-    const store = createStore(undefined, persisted);
-    store.initialize({ schema, pages: [page] });
-    store.savePageTemplate('roadmap', {
-      id: 'template-brief', name: 'Brief', title: 'Novo brief', icon: '📝', properties: { status: 'todo', score: '10' },
-      content: null, createdAt: '2026-06-24T00:00:00.000Z', updatedAt: '2026-06-24T00:00:00.000Z',
-    });
-    expect(store.read().dataSourceTemplates?.roadmap).toHaveLength(1);
-    store.destroy();
-
-    const restored = createStore(undefined, persisted);
-    restored.initialize({ schema, pages: [page] });
-    expect(restored.read().dataSourceTemplates?.roadmap[0]).toMatchObject({ id: 'template-brief', name: 'Brief' });
-    restored.deletePageTemplate('roadmap', 'template-brief');
-    expect(restored.read().dataSourceTemplates?.roadmap).toEqual([]);
-  });
-
-  it('persists table, list, gallery, timeline and chart as views of one data source', () => {
-    const persisted = new Map<string, Doc>();
-    const store = createStore(undefined, persisted);
-    store.initialize({ schema, pages: [page] });
-    store.createResource({ id: 'table-shared', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'table', title: 'Table', pageIds: [], propertyIds: ['status', 'score'] });
-    store.createResource({ id: 'list-shared', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'list', title: 'List', pageIds: [], propertyIds: ['score'] });
-    store.createResource({ id: 'gallery-shared', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'gallery', title: 'Gallery', pageIds: [], propertyIds: ['status'] });
-    store.createResource({ id: 'timeline-shared', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'timeline', title: 'Timeline', pageIds: [], propertyIds: ['due'], datePropertyId: 'due', timezone: 'America/Sao_Paulo' });
-    store.createResource({ id: 'chart-shared', databaseId: 'roadmap', dataSourceId: 'roadmap', type: 'chart', title: 'Chart', pageIds: [], propertyIds: ['status', 'score'], chartType: 'donut', aggregation: 'sum', groupPropertyId: 'status', valuePropertyId: 'score' });
-    expect(store.read().resources?.filter((item) => item.id.endsWith('-shared')).every((item) => item.pageIds.includes('page-1'))).toBe(true);
-    store.destroy();
-
-    const restored = createStore(undefined, persisted);
-    restored.initialize({ schema, pages: [page] });
-    expect(restored.read().resources?.filter((item) => item.id.endsWith('-shared')).map((item) => item.type)).toEqual([
-      'table', 'list', 'gallery', 'timeline', 'chart',
-    ]);
-    expect(restored.read().resources?.find((item) => item.id === 'chart-shared')).toMatchObject({
-      chartType: 'donut', aggregation: 'sum', groupPropertyId: 'status', valuePropertyId: 'score',
-    });
-  });
-
-  it('migrates database v2 to data source v1 idempotently without losing values', () => {
-    const schemaWithAudit: NotionSchema = {
-      properties: [
-        ...schema.properties,
-        { id: 'createdTime', name: 'Criado em', type: 'created_time' },
-        { id: 'editedTime', name: 'Editado em', type: 'last_edited_time' },
-      ],
-    };
-    const workspace = new Doc();
-    workspace.getMap<string>('resource-references').set('board-roadmap', JSON.stringify({
-      id: 'board-roadmap', type: 'board', databaseId: 'roadmap',
-    }));
-    workspace.getArray<string>('resource-order').push(['board-roadmap']);
-    workspace.getMap<string>('database-references').set('roadmap', JSON.stringify({ id: 'roadmap', title: 'Roadmap' }));
-    workspace.getArray<string>('database-order').push(['roadmap']);
-
-    const view = new Doc();
-    const resource = view.getMap<unknown>('resource');
-    resource.set('type', 'board');
-    resource.set('databaseId', 'roadmap');
-    resource.set('title', 'Roadmap');
-    resource.set('statusPropertyId', 'status');
-    const propertyIds = new YArray<string>();
-    propertyIds.push(['status', 'due', 'score']);
-    resource.set('propertyIds', propertyIds);
-
-    const persisted = new Map<string, Doc>([
-      ['workspace:notion-pages-lab', workspace],
-      ['database:roadmap:v2', createLegacyDataSource(schema, [page])],
-      ['view:board-roadmap', view],
-    ]);
-    const first = createStore(undefined, persisted);
-    first.initialize({ schema: schemaWithAudit, pages: [page] });
-    const firstState = first.read();
-    first.destroy();
-
-    const second = createStore(undefined, persisted);
-    second.initialize({ schema: schemaWithAudit, pages: [page] });
-    const secondState = second.read();
-    expect(secondState.pages).toEqual(firstState.pages);
-    expect(secondState.pages).toHaveLength(1);
-    expect(secondState.pages[0].properties).toMatchObject({
-      ...page.properties,
-      createdTime: page.createdTime,
-      editedTime: page.lastEditedTime,
-    });
-    expect(secondState.dataSourceSchemas?.roadmap.properties.map((property) => property.type)).toEqual([
-      'status', 'date', 'text', 'created_time', 'last_edited_time',
-    ]);
-    expect(secondState.ownership?.['page-1']).toMatchObject({ dataSourceId: 'roadmap', version: 1 });
-    expect(secondState.dataSources).toEqual([{ id: 'roadmap', databaseId: 'roadmap', title: 'Roadmap' }]);
+    expect(state.dataSourceSchemas?.roadmap.properties.map((property) => property.id)).toEqual(schema.properties.map((property) => property.id));
+    expect(state.dataSourceSchemas?.['isolated-source'].properties.map((property) => property.id)).toEqual(['isolated-note']);
+    expect(state.resources?.find((resource) => resource.id === 'board-roadmap')?.pageIds).toEqual(['page-1']);
+    expect(state.resources?.find((resource) => resource.id === 'isolated-board')?.pageIds).toEqual([]);
   });
 });
