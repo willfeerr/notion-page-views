@@ -8,7 +8,8 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
-    "test": "npm run typecheck && npm run test:unit && npm run build"
+    "test": "npm run typecheck && npm run test:unit && npm run build",
+    "cleanup:board-placement": "node scripts/cleanup-board-placement-shell.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "latest",
@@ -25,6 +26,7 @@
     "@lexical/table": "0.35.0",
     "@lexical/utils": "0.35.0",
     "@lexical/yjs": "0.35.0",
+    "@hocuspocus/provider": "latest",
     "katex": "latest",
     "lexical": "0.35.0",
     "lucide-react": "latest",
