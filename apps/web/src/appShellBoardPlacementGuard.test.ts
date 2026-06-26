@@ -1,10 +1,13 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+
+const currentDir = dirname(fileURLToPath(import.meta.url));
 
 describe('App shell Notion-first board relation contract', () => {
   it('does not reintroduce Board placement pseudo-block wiring', () => {
-    const source = readFileSync(resolve(__dirname, 'App.tsx'), 'utf8');
+    const source = readFileSync(resolve(currentDir, 'App.tsx'), 'utf8');
 
     expect(source).not.toContain('BoardLinkOption');
     expect(source).not.toContain('BoardLinkValue');
