@@ -13,10 +13,25 @@ function removeExact(fragment, label) {
   source = source.replace(fragment, '');
 }
 
+function replaceExact(fragment, replacement, label) {
+  if (!source.includes(fragment)) {
+    console.warn(`[cleanup-board-placement-shell] fragment not found: ${label}`);
+    return;
+  }
+  source = source.replace(fragment, replacement);
+}
+
 source = source.replace(
   "import type { BoardLinkOption, BoardLinkValue, CollabPresence, DatabasePageLayout, DatabasePageTemplate, NotionPageData, NotionSchema, RelationTargetOption, StoredPropertyValue } from '../notion-page/types';",
   "import type { CollabPresence, DatabasePageLayout, DatabasePageTemplate, NotionPageData, NotionSchema, RelationTargetOption, StoredPropertyValue } from '../notion-page/types';",
 );
+
+if (!source.includes("import { resolveCollabConfig } from './collabConfig';")) {
+  source = source.replace(
+    "import { capturePageTemplate, instantiatePageTemplate } from './pageTemplates';\n",
+    "import { capturePageTemplate, instantiatePageTemplate } from './pageTemplates';\nimport { resolveCollabConfig } from './collabConfig';\n",
+  );
+}
 
 removeExact(`  const openPageBoard = openPage
     ? resources.find((resource): resource is BoardResource => resource.type === 'board' && resource.pageIds.includes(openPage.id))
@@ -57,6 +72,12 @@ removeExact(`              boardOptions={boardOptions.filter((board) => board.da
               boardPlacement={boardPlacement}
               onBoardPlacementChange={updateBoardPlacement}
 `, 'NotionPageView board placement props');
+
+replaceExact(
+  "              collab={{ transport: 'broadcast', room: ROOM_NAMES.page(openPage.id), user: { ...collabUser, location: editingLocation }, onPresenceChange: setPresence }}",
+  "              collab={{ ...resolveCollabConfig({ room: ROOM_NAMES.page(openPage.id), user: { ...collabUser, location: editingLocation } }), onPresenceChange: setPresence }}",
+  'NotionPageView collab config',
+);
 
 const forbidden = [
   'BoardLinkOption',
