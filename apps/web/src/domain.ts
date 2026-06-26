@@ -179,7 +179,7 @@ export function buildProperty(type: PropertyType, name?: string, people: PersonO
   }
   if (type === 'person') return { id, name: name ?? 'Pessoa', type, people, multiple: true };
   if (type === 'date') return { id, name: name ?? 'Data', type, includeTime: true, timezone: DEFAULT_TIMEZONE };
-  if (type === 'relation') return { id, name: name ?? 'Relação', type, targetDataSourceId: 'standalone', multiple: true };
+  if (type === 'relation') return { id, name: name ?? 'Relação', type, targetDataSourceId: 'standalone', cardinality: 'many', multiple: true };
   if (type === 'unique_id') return { id, name: name ?? 'ID', type, prefix: 'PAGE' };
   if (type === 'files') return { id, name: name ?? 'Arquivos', type };
   if (type === 'created_by') return { id, name: name ?? 'Criado por', type };
