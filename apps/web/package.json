@@ -8,8 +8,7 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
-    "test": "npm run typecheck && npm run test:unit && npm run build",
-    "cleanup:board-placement": "node scripts/cleanup-board-placement-shell.mjs"
+    "test": "npm run typecheck && npm run test:unit && npm run build"
   },
   "dependencies": {
     "@dnd-kit/core": "latest",
