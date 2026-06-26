@@ -16,7 +16,8 @@ import {
 } from 'lucide-react';
 import type {
   NotionSchema, PageProperties, PropertyDefinition,
-  DatabasePageLayout, PersonOption, PropertyType, RelationTargetOption, SelectOption, StoredPropertyValue,
+  DatabasePageLayout, PersonOption, PropertyType, RelationCardinality,
+  RelationTargetOption, SelectOption, StoredPropertyValue,
 } from './types';
 import { PROPERTY_ICONS, PROPERTY_TYPE_LABELS } from './propertyTokens';
 import { PropertyField } from './fields/PropertyField';
@@ -38,6 +39,11 @@ function isEmptyValue(val: StoredPropertyValue): boolean {
   if (val === null || val === undefined || val === '') return true;
   if (Array.isArray(val) && val.length === 0) return true;
   return false;
+}
+
+function relationCardinality(definition: PropertyDefinition): RelationCardinality {
+  if (definition.type !== 'relation') return 'many';
+  return definition.cardinality ?? (definition.multiple === false ? 'one' : 'many');
 }
 
 const ALWAYS_SHOW_TYPES: PropertyType[] = ['checkbox', 'created_time', 'last_edited_time', 'unique_id', 'created_by', 'last_edited_by'];
@@ -81,7 +87,7 @@ function buildNewProperty(type: PropertyType, people: PersonOption[] = [], relat
     case 'date':
       return { id, name: 'Data', type, includeTime: true, timezone: 'America/Sao_Paulo' };
     case 'relation':
-      return { id, name: 'Relação', type, targetDataSourceId: relationTargetId, multiple: true };
+      return { id, name: 'Relação', type, targetDataSourceId: relationTargetId, cardinality: 'many', multiple: true };
     case 'unique_id':
       return { id, name: 'ID', type, prefix: 'PAGE' };
     default:
@@ -108,6 +114,7 @@ interface SortableRowProps {
   onDeleteOption: (propId: string, optionId: string) => void;
   relationTargets: RelationTargetOption[];
   onRelationTargetChange: (propertyId: string, targetDataSourceId: string) => void;
+  onRelationCardinalityChange: (propertyId: string, cardinality: RelationCardinality) => void;
 }
 
 function SortablePropertyRow({
@@ -115,7 +122,7 @@ function SortablePropertyRow({
   readOnly, onChange,
   onStartRename, onFinishRename, onCancelRename, onRenameDraftChange,
   onDelete, onChangeType, onCreateOption, onUpdateOption, onDeleteOption,
-  relationTargets, onRelationTargetChange,
+  relationTargets, onRelationTargetChange, onRelationCardinalityChange,
 }: SortableRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: definition.id, disabled: readOnly });
   const style = { transform: DndCSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, zIndex: isDragging ? 10 : undefined };
@@ -191,15 +198,28 @@ function SortablePropertyRow({
       </div>
 
       <div className="npc-property-value-cell">
-        {definition.type === 'relation' && !readOnly && relationTargets.length > 0 ? (
-          <select
-            className="npc-relation-target"
-            aria-label="Base relacionada"
-            value={definition.targetDataSourceId}
-            onChange={(event) => onRelationTargetChange(definition.id, event.target.value)}
-          >
-            {relationTargets.map((target) => <option key={target.id} value={target.id}>{target.title}</option>)}
-          </select>
+        {definition.type === 'relation' && !readOnly ? (
+          <div className="npc-relation-controls">
+            {relationTargets.length > 0 ? (
+              <select
+                className="npc-relation-target"
+                aria-label="Base relacionada"
+                value={definition.targetDataSourceId}
+                onChange={(event) => onRelationTargetChange(definition.id, event.target.value)}
+              >
+                {relationTargets.map((target) => <option key={target.id} value={target.id}>{target.title}</option>)}
+              </select>
+            ) : null}
+            <select
+              className="npc-relation-cardinality"
+              aria-label="Cardinalidade da relação"
+              value={relationCardinality(definition)}
+              onChange={(event) => onRelationCardinalityChange(definition.id, event.target.value as RelationCardinality)}
+            >
+              <option value="many">Várias páginas</option>
+              <option value="one">Uma página</option>
+            </select>
+          </div>
         ) : null}
         <PropertyField
           definition={definition}
@@ -350,6 +370,18 @@ export function PropertiesPanel({
     onChange?.(propertyId, []);
   }
 
+  function changeRelationCardinality(propertyId: string, cardinality: RelationCardinality) {
+    if (!onSchemaChange) return;
+    onSchemaChange({
+      ...schema,
+      properties: schema.properties.map((property) => property.id === propertyId && property.type === 'relation'
+        ? { ...property, cardinality, multiple: cardinality === 'many' }
+        : property),
+    });
+    const current = properties[propertyId];
+    if (cardinality === 'one' && Array.isArray(current) && current.length > 1) onChange?.(propertyId, current.slice(0, 1));
+  }
+
   const visibleProps = schema.properties.filter((p) => ALWAYS_SHOW_TYPES.includes(p.type) || showHidden || !isEmptyValue(properties[p.id]));
   const emptyPropertyCount = schema.properties.filter((p) => !ALWAYS_SHOW_TYPES.includes(p.type) && isEmptyValue(properties[p.id])).length;
   const sortableIds = visibleProps.map((p) => p.id);
@@ -375,6 +407,7 @@ export function PropertiesPanel({
       onDeleteOption={handleDeleteOption}
       relationTargets={relationTargets}
       onRelationTargetChange={changeRelationTarget}
+      onRelationCardinalityChange={changeRelationCardinality}
     />;
   }
 
