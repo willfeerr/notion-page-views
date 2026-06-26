@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Doc, applyUpdate, encodeStateAsUpdate } from 'yjs';
 import type { NotionPageData, NotionSchema } from '../notion-page/types';
+import type { WorkspaceResource } from './domain';
 import { WorkspaceYjsStore } from './workspaceYjs';
 
 function createStore(persisted: Map<string, Doc> = new Map()) {
@@ -62,5 +63,38 @@ describe('WorkspaceYjsStore ownership index', () => {
     const table = store.read().resources?.find((resource) => resource.id === 'table-roadmap');
     expect(table?.pageIds).toEqual(['page-1']);
     expect(table?.propertyIds).toEqual(['status', 'note']);
+  });
+
+  it('shares rows across views of the same data source without sharing view configuration', () => {
+    const store = createStore();
+    store.initialize({ schema, pages: [page] });
+
+    store.createResource({
+      id: 'list-roadmap',
+      databaseId: 'roadmap',
+      dataSourceId: 'roadmap',
+      type: 'list',
+      title: 'Roadmap list',
+      pageIds: ['ignored-by-view'],
+      propertyIds: ['note'],
+      projection: { propertyIds: ['note'], openMode: 'side_peek', cardPreview: 'none' },
+    });
+    store.updateResource('list-roadmap', {
+      sorts: [{ propertyId: 'note', direction: 'descending' }],
+      projection: { propertyIds: ['note'], openMode: 'center_peek', cardPreview: 'none' },
+    } as Partial<WorkspaceResource>);
+
+    const resources = store.read().resources ?? [];
+    const board = resources.find((resource) => resource.id === 'board-roadmap');
+    const list = resources.find((resource) => resource.id === 'list-roadmap');
+
+    expect(board?.pageIds).toEqual(['page-1']);
+    expect(list?.pageIds).toEqual(['page-1']);
+    expect(board?.propertyIds).toEqual(['status', 'note']);
+    expect(list?.propertyIds).toEqual(['note']);
+    expect(board?.sorts).toBeUndefined();
+    expect(list?.sorts).toEqual([{ propertyId: 'note', direction: 'descending' }]);
+    expect(board?.projection?.openMode).toBe('full_page');
+    expect(list?.projection?.openMode).toBe('center_peek');
   });
 });
