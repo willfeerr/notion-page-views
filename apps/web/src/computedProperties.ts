@@ -1,4 +1,11 @@
-import type { FormulaExpression, NotionPageData, NotionSchema, RollupPropertyDefinition, StoredPropertyValue } from '../notion-page/types';
+import type {
+  FormulaExpression,
+  NotionPageData,
+  NotionSchema,
+  RelationPropertyDefinition,
+  RollupPropertyDefinition,
+  StoredPropertyValue,
+} from '../notion-page/types';
 
 function formulaValue(expression: FormulaExpression, properties: Record<string, StoredPropertyValue>): StoredPropertyValue {
   if (expression.kind === 'literal') return expression.value;
@@ -13,6 +20,34 @@ function formulaValue(expression: FormulaExpression, properties: Record<string, 
   if (expression.operator === 'subtract') return a - b;
   if (expression.operator === 'multiply') return a * b;
   return b === 0 ? null : a / b;
+}
+
+function ids(value: StoredPropertyValue): string[] {
+  return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
+}
+
+function isSingle(definition: RelationPropertyDefinition): boolean {
+  return definition.cardinality === 'one' || definition.multiple === false;
+}
+
+function addInverseRelations(pages: NotionPageData[], schemas: Record<string, NotionSchema>): void {
+  const pageById = new Map(pages.map((page) => [page.id, page]));
+
+  for (const page of pages) {
+    for (const property of schemas[page.id]?.properties ?? []) {
+      if (property.type !== 'relation' || !property.inversePropertyId) continue;
+      for (const targetId of ids(page.properties[property.id])) {
+        const target = pageById.get(targetId);
+        const inverse = schemas[targetId]?.properties.find((candidate): candidate is RelationPropertyDefinition => (
+          candidate.type === 'relation' && candidate.id === property.inversePropertyId
+        ));
+        if (!target || !inverse) continue;
+        const next = ids(target.properties[inverse.id]);
+        if (!next.includes(page.id)) next.push(page.id);
+        target.properties[inverse.id] = isSingle(inverse) ? next.slice(0, 1) : next;
+      }
+    }
+  }
 }
 
 function rollupValue(definition: RollupPropertyDefinition, page: NotionPageData, pages: Map<string, NotionPageData>): StoredPropertyValue {
@@ -40,6 +75,7 @@ export function materializeComputedProperties(
 ): NotionPageData[] {
   const materialized = pages.map((page) => ({ ...page, properties: { ...page.properties } }));
   const byId = new Map(materialized.map((page) => [page.id, page]));
+  addInverseRelations(materialized, schemas);
   materialized.forEach((page) => {
     schemas[page.id]?.properties.filter((definition) => definition.type === 'formula').forEach((definition) => {
       page.properties[definition.id] = formulaValue(definition.expression, page.properties);
