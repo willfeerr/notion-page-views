@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import type { SerializedEditorState } from 'lexical';
 
@@ -31,36 +31,30 @@ export function SerializedStateSyncPlugin({
   mode?: 'sync' | 'hydrate-empty-once';
 }) {
   const [editor] = useLexicalComposerContext();
-  const hydratedRef = useRef(false);
 
   useEffect(() => {
     if (!value) return;
 
-    const applyIncoming = () => {
+    const applyIncoming = (onlyWhenCurrentIsEmpty: boolean) => {
       const incoming = JSON.stringify(value);
       const currentState = editor.getEditorState().toJSON();
       const current = JSON.stringify(currentState);
       if (incoming === current) return;
-
-      if (mode === 'hydrate-empty-once') {
-        if (hydratedRef.current) return;
+      if (onlyWhenCurrentIsEmpty) {
         if (!hasSerializedEditorContent(value)) return;
-        if (hasSerializedEditorContent(currentState)) {
-          hydratedRef.current = true;
-          return;
-        }
-        hydratedRef.current = true;
+        if (hasSerializedEditorContent(currentState)) return;
       }
-
       editor.setEditorState(editor.parseEditorState(incoming));
     };
 
     if (mode === 'hydrate-empty-once') {
-      const timeout = window.setTimeout(applyIncoming, 250);
-      return () => window.clearTimeout(timeout);
+      const timers = [0, 80, 220, 500, 1000, 1800].map((delay) => (
+        window.setTimeout(() => applyIncoming(true), delay)
+      ));
+      return () => timers.forEach((timer) => window.clearTimeout(timer));
     }
 
-    applyIncoming();
+    applyIncoming(false);
     return undefined;
   }, [editor, mode, value]);
 
