@@ -2,8 +2,11 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const appPath = resolve(process.cwd(), 'src/App.tsx');
+const typesPath = resolve(process.cwd(), 'notion-page/types.ts');
 let source = readFileSync(appPath, 'utf8');
-const original = source;
+let typesSource = readFileSync(typesPath, 'utf8');
+const originalSource = source;
+const originalTypesSource = typesSource;
 
 function removeExact(fragment, label) {
   if (!source.includes(fragment)) {
@@ -11,6 +14,14 @@ function removeExact(fragment, label) {
     return;
   }
   source = source.replace(fragment, '');
+}
+
+function removeExactFromTypes(fragment, label) {
+  if (!typesSource.includes(fragment)) {
+    console.warn(`[cleanup-board-placement-shell] types fragment not found: ${label}`);
+    return;
+  }
+  typesSource = typesSource.replace(fragment, '');
 }
 
 function replaceExact(fragment, replacement, label) {
@@ -81,6 +92,12 @@ if (!source.includes('resolveCollabConfig({ room: ROOM_NAMES.page(openPage.id)')
   );
 }
 
+removeExactFromTypes(`export interface BoardLinkLane { id: string; name: string; color: PropertyColor; }
+export interface BoardLinkOption { id: string; databaseId: string; title: string; lanes: BoardLinkLane[]; }
+export interface BoardLinkValue { boardId: string; laneId: string | null; }
+
+`, 'BoardLink legacy types');
+
 const forbidden = [
   'BoardLinkOption',
   'BoardLinkValue',
@@ -90,14 +107,15 @@ const forbidden = [
   'onBoardPlacementChange',
   'updateBoardPlacement',
 ];
-const remaining = forbidden.filter((term) => source.includes(term));
+const remaining = forbidden.filter((term) => source.includes(term) || typesSource.includes(term));
 if (remaining.length) {
   throw new Error(`Board placement cleanup incomplete. Remaining terms: ${remaining.join(', ')}`);
 }
 
-if (source === original) {
-  console.log('[cleanup-board-placement-shell] App.tsx already clean.');
+if (source === originalSource && typesSource === originalTypesSource) {
+  console.log('[cleanup-board-placement-shell] App.tsx and types.ts already clean.');
 } else {
-  writeFileSync(appPath, source);
-  console.log('[cleanup-board-placement-shell] App.tsx cleaned.');
+  if (source !== originalSource) writeFileSync(appPath, source);
+  if (typesSource !== originalTypesSource) writeFileSync(typesPath, typesSource);
+  console.log('[cleanup-board-placement-shell] App.tsx and legacy BoardLink types cleaned.');
 }
