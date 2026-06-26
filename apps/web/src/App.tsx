@@ -6,7 +6,7 @@ import type { SerializedEditorState } from 'lexical';
 import { NotionEditor, NotionPageCard, NotionPageView } from '../notion-page';
 import { PropertiesPanel } from '../notion-page/PropertiesPanel';
 import { samplePages, sampleSchema } from '../notion-page/example/sampleData';
-import type { BoardLinkOption, BoardLinkValue, CollabPresence, DatabasePageLayout, DatabasePageTemplate, NotionPageData, NotionSchema, RelationTargetOption, StoredPropertyValue } from '../notion-page/types';
+import type { CollabPresence, DatabasePageLayout, DatabasePageTemplate, NotionPageData, NotionSchema, RelationTargetOption, StoredPropertyValue } from '../notion-page/types';
 import { BroadcastProvider } from '../notion-page/editor/BroadcastProvider';
 import { CalendarView } from './CalendarView';
 import { ChartView } from './ChartView';
@@ -23,6 +23,7 @@ import { defaultPropertyValue } from './propertyRegistry';
 import { ViewSettings } from './ViewSettings';
 import { PageTemplateMenu } from './PageTemplateMenu';
 import { capturePageTemplate, instantiatePageTemplate } from './pageTemplates';
+import { resolveCollabConfig } from './collabConfig';
 
 type View = WorkspaceResource['type'] | 'page';
 
@@ -192,24 +193,10 @@ export default function App() {
     ? resources.find((resource) => resource.pageIds.includes(openPage.id))
     : undefined;
   const openPageDataSourceId = openPage ? ownership[openPage.id]?.dataSourceId : undefined;
-  const openPageBoard = openPage
-    ? resources.find((resource): resource is BoardResource => resource.type === 'board' && resource.pageIds.includes(openPage.id))
-    : undefined;
   const openPageSchema = openPageResource
     ? dataSourceSchemas[openPageResource.dataSourceId] ?? { properties: [] }
     : openPage ? pageSchemas[openPage.id] ?? { properties: [] } : { properties: [] };
   const activeTemplates = activeResource ? dataSourceTemplates[activeResource.dataSourceId] ?? [] : [];
-  const boardOptions: BoardLinkOption[] = resources.flatMap((resource) => {
-    if (resource.type !== 'board') return [];
-    const grouping = dataSourceSchemas[resource.dataSourceId]?.properties.find((property) => property.id === resource.statusPropertyId && property.type === 'status');
-    if (!grouping || grouping.type !== 'status') return [];
-    return [{
-      id: resource.id,
-      databaseId: resource.dataSourceId,
-      title: resource.title,
-      lanes: grouping.options.map((option) => ({ id: option.id, name: option.name, color: option.color })),
-    }];
-  });
   const relationTargets: RelationTargetOption[] = [...new Map(resources.map((resource) => [resource.dataSourceId, resource])).values()]
     .map((resource) => ({
       id: resource.dataSourceId,
@@ -219,14 +206,6 @@ export default function App() {
         return related ? [{ id: related.id, title: related.title || 'Sem titulo', icon: related.icon }] : [];
       }),
     }));
-  const boardPlacement: BoardLinkValue | null = openPage && openPageBoard
-    ? {
-        boardId: openPageBoard.id,
-        laneId: typeof openPage.properties[openPageBoard.statusPropertyId] === 'string'
-          ? openPage.properties[openPageBoard.statusPropertyId] as string
-          : null,
-      }
-    : null;
   const statusDefinition = activeResource?.type === 'board'
     ? activeSchema.properties.find((property) => property.id === activeResource.statusPropertyId && property.type === 'status')
     : undefined;
@@ -284,22 +263,6 @@ export default function App() {
   function closePageView() {
     if (peekMode) setPeekMode(null);
     else setView(activeResource?.type ?? 'board');
-  }
-
-  function updateBoardPlacement(placement: BoardLinkValue | null) {
-    if (!openPage) return;
-    if (!placement) {
-      if (!openPageBoard) return;
-      if (!confirm('Remover esta pagina do database do board? As propriedades desse database serao removidas.')) return;
-      workspaceStoreRef.current?.unlinkPage(openPageBoard.id, openPage.id);
-      return;
-    }
-
-    const target = resources.find((resource): resource is BoardResource => resource.type === 'board' && resource.id === placement.boardId);
-    if (!target || !placement.laneId) return;
-    if (openPageResource?.dataSourceId !== target.dataSourceId) return;
-    workspaceStoreRef.current?.updateProperty(openPage.id, target.statusPropertyId, placement.laneId);
-    setActiveResourceId(target.id);
   }
 
   function moveOpenPage(targetDataSourceId: string, propertyMapping: PropertyMapping[]) {
@@ -790,7 +753,7 @@ export default function App() {
             <NotionPageView
               schema={openPageSchema}
               page={openPage}
-              collab={{ transport: 'broadcast', room: ROOM_NAMES.page(openPage.id), user: { ...collabUser, location: editingLocation }, onPresenceChange: setPresence }}
+              collab={{ ...resolveCollabConfig({ room: ROOM_NAMES.page(openPage.id), user: { ...collabUser, location: editingLocation } }), onPresenceChange: setPresence }}
               onTitleChange={(title) => updatePage(openPage.id, { title })}
               onIconChange={(icon) => updatePage(openPage.id, { icon })}
               onCoverChange={(coverUrl) => updatePage(openPage.id, { coverUrl })}
@@ -800,9 +763,6 @@ export default function App() {
               onSchemaChange={openPageResource
                 ? (next) => updateSchema(next, {}, openPageResource)
                 : (next) => workspaceStoreRef.current?.applyPageSchema(openPage.id, next)}
-              boardOptions={boardOptions.filter((board) => board.databaseId === openPageDataSourceId)}
-              boardPlacement={boardPlacement}
-              onBoardPlacementChange={updateBoardPlacement}
               relationTargets={relationTargets}
               layout={openPageResource ? dataSourceLayouts[openPageResource.dataSourceId] : undefined}
               onLayoutChange={openPageResource ? (layout) => workspaceStoreRef.current?.updateDataSourceLayout(openPageResource.dataSourceId, layout) : undefined}
