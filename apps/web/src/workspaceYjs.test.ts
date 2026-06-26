@@ -150,18 +150,18 @@ describe('WorkspaceYjsStore', () => {
     expect(state.pages.find((item) => item.id === 'private-b')?.properties).not.toHaveProperty('private-note');
   });
 
-  it('moves a standalone page into a board data source and back through explicit move APIs', () => {
+  it('moves a standalone page into a board database and back through legacy move APIs', () => {
     const store = createStore();
     store.initialize({ schema, pages: [page] });
     store.insertPage({ ...page, id: 'standalone', properties: {} });
-    store.movePageToResourceDataSource('board-roadmap', 'standalone');
+    store.linkPage('board-roadmap', 'standalone');
     store.updateProperty('standalone', 'status', 'todo');
 
     let state = store.read();
     expect(state.resources?.find((resource) => resource.id === 'board-roadmap')?.pageIds).toContain('standalone');
     expect(state.pages.find((item) => item.id === 'standalone')?.properties.status).toBe('todo');
 
-    store.detachPageToPrivateDataSource('board-roadmap', 'standalone');
+    store.unlinkPage('board-roadmap', 'standalone');
     state = store.read();
     expect(state.resources?.find((resource) => resource.id === 'board-roadmap')?.pageIds).not.toContain('standalone');
     expect(state.pages.find((item) => item.id === 'standalone')?.properties.status).toBe('todo');
