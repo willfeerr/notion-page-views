@@ -1,200 +1,21 @@
 /* Targeted fixes for page property composition and document block handles. */
 
-.npc-properties-panel > .npc-board-link-row {
-  order: 1;
-}
-
-.npc-properties-panel > .npc-popover-wrapper:has(.npc-layout-trigger) {
-  order: 2;
-}
-
-.npc-properties-panel > .npc-hidden-props-toggle {
-  order: 3;
-}
-
-.npc-properties-panel > .npc-popover-wrapper:has(.npc-add-property-btn) {
-  order: 4;
-}
-
-.npc-board-link-row {
-  display: flex;
-  align-items: flex-start;
-  min-height: 32px;
-  padding: 3px 4px;
-  margin: 0;
-  border-radius: var(--npc-radius);
-}
-
-.npc-board-link-row:hover {
-  background: var(--npc-hover);
-}
-
-.npc-board-link-label {
-  width: 160px;
-  flex: 0 0 160px;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 6px 5px 2px;
-  color: var(--npc-text-secondary);
-  font-size: 13.5px;
-}
-
-.npc-board-link-label svg {
-  flex-shrink: 0;
-  opacity: .85;
-}
-
-.npc-board-link-label span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.npc-board-link-value {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px 6px;
-}
-
-.npc-board-link-value > button:first-child {
-  min-width: 0;
-  max-width: 100%;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 6px;
-  border: 0;
-  border-radius: var(--npc-radius);
-  background: transparent;
-  color: var(--npc-text);
-  font-family: var(--npc-font);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1.35;
-  cursor: pointer;
-}
-
-.npc-board-link-value > button:first-child:hover {
-  background: var(--npc-hover);
-}
-
-.npc-board-link-value strong,
-.npc-board-link-value em,
-.npc-board-link-value span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font: inherit;
-  color: inherit;
-}
-
-.npc-board-link-value strong {
-  font-weight: 500;
-}
-
-.npc-board-link-value em {
-  color: var(--npc-text-secondary);
-  font-style: normal;
-}
-
-.npc-board-link-remove {
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--npc-radius);
-  background: transparent;
-  color: var(--npc-text-secondary);
-  opacity: 0;
-  cursor: pointer;
-}
-
-.npc-board-link-row:hover .npc-board-link-remove,
-.npc-board-link-remove:focus-visible {
-  opacity: 1;
-}
-
-.npc-board-link-remove:hover {
-  background: var(--npc-hover);
-  color: var(--npc-text);
-}
-
-.npc-board-link-editor {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-  align-items: end;
+.npc-property-value-cell:has(.npc-relation-controls) {
   gap: 6px;
-  padding: 2px 6px;
+  align-items: center;
 }
 
-.npc-board-link-editor label {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-  color: var(--npc-text-secondary);
-  font-size: 10px;
-}
-
-.npc-board-link-editor select {
-  min-width: 0;
-  height: 28px;
-  border: 0;
-  border-radius: var(--npc-radius);
-  background: transparent;
-  color: var(--npc-text);
-  font: 400 13px/1 var(--npc-font);
-}
-
-.npc-board-link-editor select:hover,
-.npc-board-link-editor select:focus {
-  background: var(--npc-hover);
-  outline: none;
-}
-
-.npc-board-link-actions {
+.npc-relation-controls {
+  order: 2;
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
 }
 
-.npc-board-link-actions button {
-  height: 28px;
-  border: 0;
-  border-radius: var(--npc-radius);
-  background: transparent;
-  color: var(--npc-text-secondary);
-  font: 500 12px/1 var(--npc-font);
-  padding: 0 8px;
-}
-
-.npc-board-link-actions button:hover {
-  background: var(--npc-hover);
-  color: var(--npc-text);
-}
-
-.npc-board-link-actions button.is-primary {
-  color: var(--npc-accent);
-}
-
-.npc-property-value-cell:has(.npc-relation-target) {
-  gap: 6px;
-}
-
-.npc-relation-target {
-  order: 2;
-  flex: 0 1 150px;
-  margin-left: auto;
+.npc-relation-target,
+.npc-relation-cardinality {
   height: 26px;
   min-width: 92px;
   max-width: 150px;
@@ -206,8 +27,14 @@
   opacity: .72;
 }
 
+.npc-relation-cardinality {
+  max-width: 118px;
+}
+
 .npc-relation-target:hover,
-.npc-relation-target:focus {
+.npc-relation-target:focus,
+.npc-relation-cardinality:hover,
+.npc-relation-cardinality:focus {
   background: var(--npc-hover-bg);
   color: var(--npc-text-primary);
   opacity: 1;
@@ -246,45 +73,7 @@
 }
 
 @media (max-width: 640px) {
-  .npc-board-link-row {
-    display: flex;
-    align-items: flex-start;
-    min-height: 32px;
-    padding: 3px 4px;
-  }
-
-  .npc-board-link-label {
-    width: 40%;
-    flex: 0 0 40%;
-    overflow: hidden;
-    white-space: nowrap;
-  }
-
-  .npc-board-link-value {
-    min-width: 0;
-    padding: 2px 4px;
-    overflow: hidden;
-  }
-
-  .npc-board-link-value > button:first-child {
-    flex: 1 1 auto;
-    padding: 4px 5px;
-  }
-
-  .npc-board-link-value span[aria-hidden='true'] {
-    display: none;
-  }
-
-  .npc-board-link-remove {
-    opacity: 1;
-  }
-
-  .npc-board-link-editor {
-    grid-template-columns: 1fr;
-    padding: 1px 4px;
-  }
-
-  .npc-relation-target {
+  .npc-relation-controls {
     display: none;
   }
 }
