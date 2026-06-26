@@ -21,6 +21,14 @@ interface CollabPluginProps extends CollabConfig {
   initialContent?: SerializedEditorState | null;
 }
 
+export function normalizeHocuspocusUrl(url?: string): string {
+  const value = url?.trim() ?? '';
+  if (!value) return '';
+  if (value.startsWith('https://')) return `wss://${value.slice('https://'.length)}`;
+  if (value.startsWith('http://')) return `ws://${value.slice('http://'.length)}`;
+  return value;
+}
+
 export function CollabPlugin({ transport = 'broadcast', wsUrl, room, user, initialContent, onPresenceChange }: CollabPluginProps) {
   const providerRef = useRef<Provider | null>(null);
   const [presenceProvider, setPresenceProvider] = useState<Provider | null>(null);
@@ -36,7 +44,7 @@ export function CollabPlugin({ transport = 'broadcast', wsUrl, room, user, initi
     yjsDocMap.set(id, doc);
     const provider = transport === 'broadcast'
       ? new BroadcastProvider(id, doc)
-      : new HocuspocusProvider({ url: wsUrl ?? '', name: id, document: doc });
+      : new HocuspocusProvider({ url: normalizeHocuspocusUrl(wsUrl), name: id, document: doc });
     providerRef.current = provider as unknown as Provider;
     setPresenceProvider(providerRef.current);
     return providerRef.current;
