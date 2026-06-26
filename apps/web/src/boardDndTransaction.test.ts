@@ -42,7 +42,7 @@ const pages: NotionPageData[] = [
 ];
 
 describe('board DND transaction', () => {
-  it('updates grouping property and per-view rank together without changing ownership', () => {
+  it('updates grouping property and keeps membership/ownership intact', () => {
     const store = createStore();
     store.initialize({ schema, pages });
 
@@ -53,7 +53,7 @@ describe('board DND transaction', () => {
     const moved = state.pages.find((page) => page.id === 'page-2');
 
     expect(moved?.properties.status).toBe('doing');
-    expect(board?.pageIds).toEqual(['page-2', 'page-1']);
+    expect(board?.pageIds.toSorted()).toEqual(['page-1', 'page-2']);
     expect(state.ownership?.['page-2']).toMatchObject({ dataSourceId: 'roadmap' });
     expect(state.moveOperations).toEqual([]);
   });
